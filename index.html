@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reeden 小工具</title>
+<meta name="description" content="給 Reeden 閱讀 App 使用者的小工具合集。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500&family=Noto+Serif+TC:wght@600&display=swap">
+<style>
+:root{
+  --bg:#ECEBE7; --surface:#F7F6F3; --line:#D3D1CB; --fg:#1F1E1C; --muted:#6E6B65; --accent:#A84A16;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{--bg:#151514;--surface:#1F1E1C;--line:#363431;--fg:#E9E6E0;--muted:#9C988F;--accent:#E2803F;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;
+  padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:56px 64px}
+main{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1{font-family:var(--f-display);font-size:32px;margin:0;letter-spacing:.02em}
+.lede{margin:0;color:var(--muted)}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+a.tool{display:flex;flex-direction:column;gap:4px;padding:18px 20px;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:inherit;text-decoration:none}
+a.tool:hover{border-color:var(--accent)}
+a.tool:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a.tool b{font-size:17px;font-weight:500}
+a.tool span{color:var(--muted);font-size:14px}
+a.tool small{color:var(--accent);font-size:12.5px;letter-spacing:.02em}
+footer{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Reeden 小工具</h1>
+    <p class="lede">給 Reeden 閱讀 App 使用者的小工具，直接在瀏覽器裡用，不用註冊。</p>
+  </header>
+  <ul>
+    <li><a class="tool" href="./svg-studio/">
+      <b>Reeden SVG 工坊</b>
+      <span>三步做出閱讀頁的 SVG 疊加層：進度條、圓環、時鐘、電池、文字，或用自己的圖案。即時模擬在 App 裡的樣子，複製 code 就能用。</span>
+      <small>reeden-tools.github.io/svg-studio/</small>
+    </a></li>
+  </ul>
+  <footer>更多工具陸續加入中。</footer>
+</main>
+</body>
+</html>

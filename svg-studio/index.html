@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="三步做出 Reeden 閱讀頁的 SVG 疊加層，即時模擬在 App 裡的樣子，複製 code 就能用。">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Reeden SVG 工坊</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 左側編輯（模板、參數、code、變數），右側手機模擬閱讀頁＋模擬數值；窄螢幕時預覽在上 */
+:root{
+  --bg:#ECEBE7; --surface:#F7F6F3; --sunk:#E3E2DD; --line:#D3D1CB;
+  --fg:#1F1E1C; --muted:#6E6B65; --accent:#A84A16; --accent-ink:#FFFFFF;
+  --danger:#B42318; --ok:#2F6B3A;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#151514; --surface:#1F1E1C; --sunk:#262523; --line:#363431;
+  --fg:#E9E6E0; --muted:#9C988F; --accent:#E2803F; --accent-ink:#1A1308;
+  --danger:#F0806F; --ok:#7FC08B; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151514; --surface:#1F1E1C; --sunk:#262523; --line:#363431;
+  --fg:#E9E6E0; --muted:#9C988F; --accent:#E2803F; --accent-ink:#1A1308;
+  --danger:#F0806F; --ok:#7FC08B; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+h1{font-family:var(--f-display);font-size:26px;margin:0;letter-spacing:.02em;text-wrap:balance}
+h1 small{font-family:var(--f-mono);font-size:12px;color:var(--accent);margin-left:8px;letter-spacing:.08em;font-weight:500}
+.lede{color:var(--muted);margin:0;max-width:60ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h2{font-size:12px;letter-spacing:.12em;color:var(--muted);margin:0;font-weight:500;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.col{display:flex;flex-direction:column;gap:18px;min-width:0}
+.tpls{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.tpl{appearance:none;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:10px;text-align:left;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tpl:hover{border-color:var(--muted)}
+.tpl[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.tpl .glyph{height:28px;display:flex;align-items:center;color:var(--fg)}
+.tpl .glyph svg{height:100%;width:auto;max-width:100%}
+.tpl b{font-weight:500;font-size:13px}
+.params{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.field{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.field input[type=range]{width:110px;accent-color:var(--accent)}
+.field output{font-family:var(--f-mono);font-size:12px;color:var(--fg);min-width:3ch;font-variant-numeric:tabular-nums}
+input[type=color]{width:30px;height:26px;border:1px solid var(--line);border-radius:6px;padding:1px;background:var(--bg);cursor:pointer}
+.btn{appearance:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:7px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
+.btn.small{padding:3px 9px;font-size:12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mono);font-size:12.5px;line-height:1.6;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:12px;tab-size:2;white-space:pre;overflow:auto}
+.codebar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.status{font-size:12px;font-family:var(--f-mono);display:flex;flex-direction:column;gap:2px}
+.status .ok{color:var(--ok)} .status .err{color:var(--danger)} .status .note2{color:var(--muted)}
+.boxhint{font-size:12.5px;margin:0;color:var(--fg);background:var(--sunk);border-radius:8px;padding:8px 10px}
+.boxhint b{color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums}
+.vargroup{display:flex;flex-direction:column;gap:6px}
+.vargroup h3{font-size:12px;margin:0;font-weight:500;color:var(--fg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{appearance:none;font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:6px 11px;cursor:pointer;display:inline-flex;flex-direction:column;gap:1px;align-items:flex-start;max-width:100%;text-align:left}
+.chip:hover{border-color:var(--accent)}
+.chip b{font-weight:500;font-size:13px}
+.chip code{font-family:var(--f-mono);font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.chip:hover code{color:var(--accent)}
+/* phone */
+.stage{width:100%}
+.stageInner{position:relative;margin:0 auto}
+.phone{position:absolute;top:0;left:0;transform-origin:top left;width:417px;height:876px;border-radius:44px;background:#0E0E0D;padding:12px}
+.screen{position:relative;width:393px;height:852px;border-radius:33px;overflow:hidden;background:var(--rbg);color:var(--rfg);transition:background .25s,color .25s;touch-action:none}
+.island{position:absolute;top:11px;left:50%;width:125px;height:37px;margin-left:-62.5px;border-radius:19px;background:#000;z-index:10;pointer-events:none}
+.rhead{position:absolute;top:64px;left:0;right:0;text-align:center;font-size:11px;opacity:.6;font-family:var(--f-body);letter-spacing:.06em}
+.rbody{position:absolute;top:92px;left:24px;right:24px;bottom:66px;overflow:hidden;font-family:"Kaiti TC","STKaiti","BiauKai","Noto Serif TC",serif;text-align:justify}
+.rbody p{margin:0;text-indent:2em}
+.rfoot{position:absolute;bottom:36px;left:22px;right:22px;display:flex;justify-content:space-between;font-size:11px;opacity:.6;font-variant-numeric:tabular-nums;gap:8px}
+.rfoot span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ovl{position:absolute;z-index:5;cursor:move}
+.ovl img{display:block;width:100%;height:100%;pointer-events:none;user-select:none}
+.ovl.framed{outline:1.5px dashed #D2691E;outline-offset:0}
+.ovl .h{position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;border:2.5px solid #D2691E;display:none}
+.ovl.framed .h{display:block}
+.ovl .h.br{right:-8px;bottom:-8px;cursor:nwse-resize}
+.ovl .h.r{right:-8px;top:50%;margin-top:-8px;cursor:ew-resize}
+.ovl .h.b{left:50%;bottom:-8px;margin-left:-8px;cursor:ns-resize}
+.dims{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{appearance:none;font:inherit;font-size:13px;border:0;background:var(--bg);color:var(--fg);padding:5px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--surface)}
+.simrows{display:flex;flex-direction:column;gap:10px}
+.simrow{display:grid;grid-template-columns:5.5em minmax(0,1fr) 5.5em;gap:10px;align-items:center;font-size:13px}
+.simrow label{color:var(--muted)}
+.simrow input[type=range]{width:100%;accent-color:var(--accent)}
+.simrow output{font-family:var(--f-mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.boxnums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.boxnums label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);font-family:var(--f-mono)}
+.boxnums input,.simrow input[type=time]{width:100%;font:inherit;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--surface);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<style>
+/* 步驟流程補充樣式 */
+::selection{background:var(--accent);color:var(--accent-ink)}
+textarea,input{caret-color:var(--accent)}
+.step{gap:14px}
+.step h2.q{font-family:var(--f-display);font-size:18px;letter-spacing:.02em;color:var(--fg);font-weight:600;justify-content:flex-start;gap:10px}
+.step h2.q .n{font-family:var(--f-mono);font-size:12px;font-weight:500;color:var(--accent);border:1px solid var(--accent);border-radius:999px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.sub{font-size:13px;color:var(--muted);margin:0}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{appearance:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:7px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.opt:hover{border-color:var(--muted)}
+.opt[aria-pressed="true"]{background:var(--fg);border-color:var(--fg);color:var(--surface)}
+.opt svg{width:16px;height:16px;flex:none}
+.drop{border:1.5px dashed var(--line);border-radius:10px;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;color:var(--muted)}
+.drop.over{border-color:var(--accent);color:var(--fg)}
+.filerow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:13px}
+.filerow b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.advanced h2{font-size:12px}
+textarea.pastebox{width:100%;min-height:64px;resize:vertical;font-family:var(--f-mono);font-size:12px;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea.pastebox:focus{border-color:var(--accent);outline:none}
+details.srcs{width:100%;text-align:left;font-size:13px}
+details.srcs summary{cursor:pointer;color:var(--accent);font-weight:500;list-style:none}
+details.srcs summary::-webkit-details-marker{display:none}
+details.srcs ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+details.srcs li{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+details.srcs a{color:var(--fg);font-weight:500;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)}
+details.srcs a:hover{text-decoration-color:var(--accent)}
+details.srcs .lic{font-size:12px;color:var(--muted)}
+details.vars{border-top:1px solid var(--line);padding-top:10px}
+details.vars summary{cursor:pointer;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px}
+details.vars summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+details.vars[open] summary::before{transform:rotate(45deg)}
+details.vars summary::-webkit-details-marker{display:none}
+details.vars .col{margin-top:12px}
+.copyrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.copyrow .status{flex:1;min-width:0}
+textarea#code{min-height:220px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Reeden SVG 工坊<small>PAGE OVERLAY</small></h1>
+    <p class="lede">三步做出閱讀頁的 SVG 疊加層，並即時模擬在 Reeden 裡的樣子，完成後複製 code 貼進 App。</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel step" aria-labelledby="q1">
+        <h2 class="q" id="q1"><span class="n">1</span>你想要什麼樣的 SVG？</h2>
+        <div class="tpls" id="tpls"></div>
+        <div id="styleRow" class="col" style="gap:10px"></div>
+        <input type="file" id="file" accept=".svg,image/svg+xml" hidden>
+      </section>
+
+      <section class="panel step" aria-labelledby="q2">
+        <h2 class="q" id="q2"><span class="n">2</span><span id="q2t">希望它怎麼變化？</span></h2>
+        <div id="step2" class="col" style="gap:14px"></div>
+      </section>
+
+      <section class="panel step" aria-labelledby="q3" id="step3">
+        <h2 class="q" id="q3"><span class="n">3</span>調整外觀</h2>
+        <div class="params" id="params">
+          <div class="field"><label for="pColor">顏色</label><input type="color" id="pColor" value="#2B2A27"><button class="btn small" id="useText" type="button">跟著閱讀頁文字色</button></div>
+          <div class="field"><label for="pStroke">粗細</label><input type="range" id="pStroke" min="1" max="8" step="0.5" value="2"><output id="oStroke">2</output></div>
+          <div class="field"><label for="pTrack">底色深淺</label><input type="range" id="pTrack" min="0" max="0.6" step="0.02" value="0.18"><output id="oTrack">0.18</output></div>
+        </div>
+      </section>
+
+      <section class="panel advanced" aria-labelledby="t-code">
+        <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
+        <p class="hint">上面三步會自動產生 code。想自己微調可以直接改，但再動到上面的選項時，手動修改會被覆蓋。</p>
+        <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
+        <div class="copyrow">
+          <div class="status" id="status" aria-live="polite"></div>
+          <button class="btn primary" id="copy" type="button">複製 code</button>
+        </div>
+        <p class="boxhint" id="boxHint"></p>
+        <details class="vars" id="varsBox">
+          <summary>插入變數</summary>
+          <p class="hint" style="margin-top:8px">先點 code 裡要放的位置，再點按鈕。</p>
+          <div id="vars" class="col" style="gap:14px"></div>
+        </details>
+      </section>
+    </div>
+
+    <div class="col previewCol">
+      <section class="panel" aria-labelledby="t-sim">
+        <h2 id="t-sim">模擬數值<button class="btn small" id="play" type="button">播放進度</button></h2>
+        <div class="simrows">
+          <div class="simrow"><label for="sChap">章節進度</label><input type="range" id="sChap" min="0" max="100" value="61"><output id="oChap"></output></div>
+          <div class="simrow"><label for="sBook">全書進度</label><input type="range" id="sBook" min="0" max="100" value="15"><output id="oBook"></output></div>
+          <div class="simrow"><label for="sBat">電量</label><input type="range" id="sBat" min="0" max="100" value="50"><output id="oBat"></output></div>
+          <div class="simrow"><label for="sTime">時間</label><input type="time" id="sTime" value="04:31"><label style="text-align:right"><input type="checkbox" id="now"> 現在</label></div>
+        </div>
+        <div class="boxnums" aria-label="疊加層位置與尺寸">
+          <label>寬度 %<input type="number" step="0.1" id="bw"></label>
+          <label>高度 %<input type="number" step="0.1" id="bh"></label>
+          <label>左邊距 %<input type="number" step="0.1" id="bx"></label>
+          <label>上邊距 %<input type="number" step="0.1" id="by"></label>
+        </div>
+        <p class="note">模擬僅供預覽，最終以 Reeden 實際顯示為準。文字類變數的顯示格式為示意，算式目前只模擬加減乘除與括號。</p>
+      </section>
+
+      <section class="panel" aria-labelledby="t-prev">
+        <h2 id="t-prev">模擬閱讀頁
+          <span class="seg" role="group" aria-label="日夜模式"><button type="button" id="mDay" aria-pressed="true">日間</button><button type="button" id="mNight" aria-pressed="false">夜間</button></span>
+        </h2>
+        <div class="stage" id="stage"><div class="stageInner" id="stageInner">
+          <div class="phone" id="phone"><div class="screen" id="screen">
+            <div class="island" aria-hidden="true"></div>
+            <div class="rhead" id="rHead"></div>
+            <div class="rbody" id="rBody"></div>
+            <div class="rfoot"><span id="fBook"></span><span id="fPct"></span><span id="fTime"></span></div>
+            <div class="ovl framed" id="ovl"><img id="ovlImg" alt="SVG 疊加層預覽"><i class="h r"></i><i class="h b"></i><i class="h br"></i></div>
+          </div></div>
+        </div></div>
+        <div class="dims" id="dims"></div>
+        <div class="copyrow">
+          <p class="hint" style="flex:1;min-width:0">拖曳框框移動位置，拉右下角圓點調整大小。</p>
+          <button class="btn primary" id="copy2" type="button">複製 code</button>
+        </div>
+        <p class="boxhint" id="boxHint2"></p>
+        <div class="params">
+          <div class="field"><label for="rbg">背景</label><input type="color" id="rbg"></div>
+          <div class="field"><label for="rfg">文字</label><input type="color" id="rfg"></div>
+          <div class="field"><label for="fs">內文字號</label><input type="range" id="fs" min="14" max="26" step="1" value="20"><output id="oFs">20</output></div>
+          <div class="field"><label for="em">疊加層字號 {em}</label><input type="range" id="em" min="8" max="30" step="1" value="12"><output id="oEm">12</output></div>
+          <div class="field"><span>縮放模式</span><span class="seg" role="group" aria-label="縮放模式"><button type="button" id="fitMeet" aria-pressed="true">保持比例</button><button type="button" id="fitStretch" aria-pressed="false">拉伸鋪滿</button></span></div>
+          <div class="field"><label><input type="checkbox" id="frame" checked> 顯示外框</label></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+const SW=393, SH=852;
+const $=id=>document.getElementById(id);
+const KEY='reeden-svg-studio-v6';
+const S={tpl:'bar', src:'chapterPct', txt:'cn', style:'builtin', role:'', fxs:['fill'], mdir:'lr', dir:'up', rot:'cw', fade:'in', fc:'orig', fcolor:'#2B2A27', color:'#2B2A27', em:12, fit:'meet', stroke:2, track:0.18, mode:'day', rbg:'#EFEEEA', rfg:'#2B2A27', fs:20,
+  chap:61, book:15, bat:50, time:'04:31', box:{x:28,y:752,w:337,h:14}};
+const MODES={day:{rbg:'#EFEEEA',rfg:'#2B2A27'},night:{rbg:'#1B1B1A',rfg:'#B9B5AC'}};
+let upRaw=null, upName='', upRaw2=null, upName2='', slotTarget=1;
+
+/* ---------- 中文數字 ---------- */
+function cn(n,formal){
+  n=Math.floor(Math.max(0,n)); if(n>9999) return String(n);
+  const d=formal?'零壹貳叁肆伍陸柒捌玖':'零一二三四五六七八九', u=formal?['','拾','佰','仟']:['','十','百','千'];
+  if(n===0) return d[0];
+  const s=String(n); let out='', zero=false;
+  for(let i=0;i<s.length;i++){const dg=+s[i], pos=s.length-1-i; if(dg===0){zero=true;continue} if(zero){out+=d[0];zero=false} out+=d[dg]+u[pos]}
+  if(!formal&&out.startsWith('一十')) out=out.slice(1);
+  return out;
+}
+
+/* ---------- 模擬變數 ---------- */
+const BOOK={book:'雨夜書簡',author:'林知秋',volume:'卷二',chapterNumber:12,chapterTotal:40,chapterTitle:'第十二章 雨夜',total:18,bookTotal:520};
+function vars(){
+  const [hh,mm]=S.time.split(':').map(Number);
+  const page=Math.min(BOOK.total,Math.max(1,Math.ceil(S.chap/100*BOOK.total)));
+  const bookPage=Math.min(BOOK.bookTotal,Math.max(1,Math.round(S.book/100*BOOK.bookTotal)));
+  const pad=n=>String(n).padStart(2,'0'), remain=BOOK.total-page;
+  return {
+    text:{time:pad(hh)+':'+pad(mm), time12:(((hh+11)%12)+1)+':'+pad(mm)+(hh<12?' AM':' PM'),
+      chapter:BOOK.chapterTitle, volume:BOOK.volume, book:BOOK.book, author:BOOK.author,
+      percent:Math.round(S.chap)+'%', battery:S.bat+'%', bookPercent:S.book.toFixed(2)+'%',
+      chapterRemainingTime:'剩餘 '+Math.max(1,remain)+' 分鐘', bookRemainingTime:'約 '+Math.max(1,Math.round((100-S.book)/100*9))+' 小時',
+      todayReadingTime:'42 分鐘', chapterCn:cn(BOOK.chapterNumber), chapterCnFormal:cn(BOOK.chapterNumber,true), pageCn:cn(page), totalCn:cn(BOOK.total)},
+    num:{page, total:BOOK.total, remaining:remain, batteryNumber:S.bat, bookPage, bookTotal:BOOK.bookTotal,
+      chapterNumber:BOOK.chapterNumber, chapterTotal:BOOK.chapterTotal, remainingChapters:BOOK.chapterTotal-BOOK.chapterNumber,
+      chapterPct:S.chap, bookPct:S.book, batteryPct:S.bat, hour:hh, minute:mm,
+      hourDeg:+((hh%12)*30+mm*0.5).toFixed(1), minuteDeg:mm*6, w:Math.round(S.box.w*10)/10, h:Math.round(S.box.h*10)/10, em:S.em}
+  };
+}
+
+/* ---------- 算式 ---------- */
+function evalExpr(src,env){
+  const toks=src.match(/\d*\.\d+|\d+|[A-Za-z_]\w*|[-+*/%()]|\S/g)||[]; let i=0;
+  const peek=()=>toks[i], next=()=>toks[i++];
+  function prim(){const t=next();
+    if(t===undefined) throw '算式不完整';
+    if(t==='('){const v=add(); if(next()!==')') throw '缺少右括號'; return v}
+    if(t==='-') return -prim(); if(t==='+') return prim();
+    if(/^[\d.]/.test(t)) return parseFloat(t);
+    if(/^[A-Za-z_]/.test(t)){ if(!(t in env)) throw '「'+t+'」不是數值變數'; return env[t]}
+    throw '不支援的符號「'+t+'」';}
+  function mul(){let v=prim(); while(['*','/','%'].includes(peek())){const o=next(), r=prim(); v=o==='*'?v*r:o==='/'?v/r:v%r} return v}
+  function add(){let v=mul(); while(['+','-'].includes(peek())){const o=next(), r=mul(); v=o==='+'?v+r:v-r} return v}
+  const v=add(); if(i<toks.length) throw '多出的符號「'+toks[i]+'」';
+  if(!isFinite(v)) throw '結果不是有效數字'; return v;
+}
+const fmt=v=>String(Math.round(v*1000)/1000);
+const r2=v=>Math.round(v*100)/100;
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function substitute(code){
+  const V=vars(), all=Object.assign({},V.text,V.num), errs=[], unknown=new Set();
+  let out=code.replace(/\{=([^{}]*)\}/g,(m,expr)=>{try{return fmt(evalExpr(expr.trim(),V.num))}catch(e){errs.push('{='+expr+'}：'+e);return '0'}});
+  out=out.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g,(m,n)=> n in all?esc(all[n]):(unknown.add(n),m));
+  return {out,errs,unknown:[...unknown]};
+}
+
+/* ---------- 第 1 步：種類 ---------- */
+const PCT=[['chapterPct','章節進度'],['bookPct','全書進度'],['batteryPct','電量']];
+const TXT=[['cn','第幾章（中文）','第{chapterCn}章'],['chapter','章節名','{chapter}'],['time','時間','{time}'],['book','書名','{book}'],['pct','章節進度 %','{percent}']];
+const FX=[['fill','填滿'],['reveal','出現'],['move','移動'],['rotate','旋轉'],['fade','淡入淡出']];
+const DIR=[['down','由上而下'],['up','由下而上'],['lr','由左往右'],['rl','由右往左']];
+const MDIR=[['lr','由左往右'],['rl','由右往左'],['down','由上往下'],['up','由下往上']];
+const ROT=[['cw','順時針'],['ccw','逆時針']];
+const FADE=[['in','淡入（越讀越清楚）'],['out','淡出（越讀越淡）']];
+const ROTICON={cw:'<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v2.8h-2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ccw:'<svg viewBox="0 0 16 16"><g transform="matrix(-1 0 0 1 16 0)"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v2.8h-2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg>'};
+const arrow=r=>'<svg viewBox="0 0 16 16"><g transform="rotate('+r+' 8 8)"><path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g></svg>';
+const DIRICON={down:arrow(0),up:arrow(180),lr:arrow(-90),rl:arrow(90)};
+const pctText={chapterPct:'{chapterPct}%',bookPct:'{bookPct}%',batteryPct:'{batteryPct}%'};
+const SHAPES={
+  bar:{name:'進度條',q:'它要跟著什麼變長？',src:'chapterPct',box:{x:28,y:752,w:337,h:14},
+    gen:p=>{const s=p.stroke,R=r2(s*1.8),P=p.src;return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <rect x="${R}" y="{= h/2 - ${r2(s/2)}}" width="{= w - ${r2(R*2)}}" height="${s}" rx="${r2(s/2)}" fill="${p.color}" fill-opacity="${p.track}"/>
+  <rect x="${R}" y="{= h/2 - ${r2(s/2)}}" width="{= (w - ${r2(R*2)}) * ${P} / 100}" height="${s}" rx="${r2(s/2)}" fill="${p.color}"/>
+  <circle cx="{= ${R} + (w - ${r2(R*2)}) * ${P} / 100}" cy="{= h/2}" r="${R}" fill="${p.color}"/>
+</svg>`}},
+  barText:{name:'進度條＋數字',q:'它要跟著什麼變長？',src:'chapterPct',box:{x:28,y:750,w:337,h:18},
+    gen:p=>{const s=p.stroke,P=p.src;return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <rect x="0" y="{= h/2 - ${r2(s/2)}}" width="{= w - 48}" height="${s}" rx="${r2(s/2)}" fill="${p.color}" fill-opacity="${p.track}"/>
+  <rect x="0" y="{= h/2 - ${r2(s/2)}}" width="{= (w - 48) * ${P} / 100}" height="${s}" rx="${r2(s/2)}" fill="${p.color}"/>
+  <text x="{w}" y="{= h/2 + h * 0.25}" text-anchor="end" font-size="{= h * 0.7}" fill="${p.color}">${pctText[P]}</text>
+</svg>`}},
+  ring:{name:'圓環',q:'它要跟著什麼繞圈？',src:'bookPct',box:{x:331,y:16,w:42,h:42},
+    gen:p=>{const s=p.stroke+1,P=p.src;return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h/2 - ${s}}" fill="none" stroke="${p.color}" stroke-opacity="${p.track}" stroke-width="${s}"/>
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h/2 - ${s}}" fill="none" stroke="${p.color}" stroke-width="${s}" stroke-linecap="round" stroke-dasharray="{= 6.2832 * (h/2 - ${s}) * ${P} / 100} 9999" transform="rotate(-90 {= w/2} {= h/2})"/>
+  <text x="{= w/2}" y="{= h/2 + h * 0.105}" text-anchor="middle" font-size="{= h * 0.3}" fill="${p.color}">{${P}}</text>
+</svg>`}},
+  clock:{name:'時鐘',q:'時鐘會怎麼變化？',box:{x:20,y:16,w:42,h:42},
+    gen:p=>{const s=p.stroke;return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h/2 - ${r2(s/2+0.5)}}" fill="${p.color}" fill-opacity="${p.track}" stroke="${p.color}" stroke-width="${s}"/>
+  <line x1="{= w/2}" y1="{= h/2}" x2="{= w/2}" y2="{= h/2 - h * 0.22}" stroke="${p.color}" stroke-width="${r2(s*1.5)}" stroke-linecap="round" transform="rotate({hourDeg} {= w/2} {= h/2})"/>
+  <line x1="{= w/2}" y1="{= h/2}" x2="{= w/2}" y2="{= h/2 - h * 0.34}" stroke="${p.color}" stroke-width="${s}" stroke-linecap="round" transform="rotate({minuteDeg} {= w/2} {= h/2})"/>
+  <circle cx="{= w/2}" cy="{= h/2}" r="${r2(s*1.2)}" fill="${p.color}"/>
+</svg>`}},
+  battery:{name:'電池',q:'它要跟著什麼變滿？',src:'batteryPct',box:{x:333,y:26,w:36,h:18},
+    gen:p=>{const s=Math.max(1,p.stroke*0.75),P=p.src;return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <rect x="${r2(s/2)}" y="${r2(s/2)}" width="{= w - 4 - ${s}}" height="{= h - ${s}}" rx="3" fill="${p.color}" fill-opacity="${p.track}" stroke="${p.color}" stroke-width="${s}"/>
+  <rect x="{= w - 3}" y="{= h/2 - 3}" width="3" height="6" rx="1" fill="${p.color}"/>
+  <rect x="${r2(s+2)}" y="${r2(s+2)}" width="{= (w - 8 - ${r2(s*2)}) * ${P} / 100}" height="{= h - ${r2(s*2+4)}}" rx="1.5" fill="${p.color}"/>
+</svg>`}},
+  text:{name:'文字',q:'要顯示什麼文字？',box:{x:106,y:48,w:180,h:34},
+    gen:p=>{const t=(TXT.find(x=>x[0]===p.txt)||TXT[0])[2];return `<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
+  <line x1="0" y1="{= h/2}" x2="{= w * 0.16}" y2="{= h/2}" stroke="${p.color}" stroke-opacity="${Math.max(p.track,0.25)}" stroke-width="${r2(p.stroke/2)}"/>
+  <line x1="{= w * 0.84}" y1="{= h/2}" x2="{w}" y2="{= h/2}" stroke="${p.color}" stroke-opacity="${Math.max(p.track,0.25)}" stroke-width="${r2(p.stroke/2)}"/>
+  <text x="{= w/2}" y="{= h/2 + em * 0.28}" text-anchor="middle" font-size="{= em * 0.8}" letter-spacing="2" fill="${p.color}">${t}</text>
+</svg>`}},
+  upload:{name:'自由發揮',q:'希望它怎麼變化？'}
+};
+const GLYPH={
+  bar:'<svg viewBox="0 0 60 20"><rect x="2" y="9" width="56" height="2" rx="1" fill="currentColor" opacity=".25"/><rect x="2" y="9" width="34" height="2" rx="1" fill="currentColor"/><circle cx="36" cy="10" r="3.5" fill="currentColor"/></svg>',
+  barText:'<svg viewBox="0 0 60 20"><rect x="2" y="9" width="38" height="2" fill="currentColor" opacity=".25"/><rect x="2" y="9" width="24" height="2" fill="currentColor"/><text x="58" y="14" text-anchor="end" font-size="10" font-family="sans-serif" fill="currentColor">61%</text></svg>',
+  ring:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" opacity=".25"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="20 99" stroke-linecap="round" transform="rotate(-90 12 12)"/></svg>',
+  clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 12V6.5M12 12l3.5 2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  battery:'<svg viewBox="0 0 30 16"><rect x="1" y="2" width="24" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="26" y="6" width="2.5" height="4" rx="1" fill="currentColor"/><rect x="3.5" y="4.5" width="10" height="7" rx="1.5" fill="currentColor"/></svg>',
+  text:'<svg viewBox="0 0 70 20"><line x1="0" y1="10" x2="12" y2="10" stroke="currentColor" opacity=".4"/><line x1="58" y1="10" x2="70" y2="10" stroke="currentColor" opacity=".4"/><text x="35" y="14.5" text-anchor="middle" font-size="12" font-family="serif" fill="currentColor">第十二章</text></svg>',
+  upload:'<svg viewBox="0 0 24 24"><path d="M12 16V5M7.5 9.5 12 5l4.5 4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+const FXICON={
+  none:'<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+  fill:'<svg viewBox="0 0 16 16"><path d="M8 1.5C5.5 5 3.5 7.5 3.5 10a4.5 4.5 0 0 0 9 0C12.5 7.5 10.5 5 8 1.5Z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3.6 9.5h8.8a4.5 4.5 0 0 1-8.8 0Z" fill="currentColor"/></svg>',
+  fillLR:'<svg viewBox="0 0 16 16"><path d="M8 13.5 2.6 8.3A3.2 3.2 0 0 1 8 4a3.2 3.2 0 0 1 5.4 4.3Z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 13.5 2.6 8.3A3.2 3.2 0 0 1 7 3.7V13Z" fill="currentColor"/></svg>',
+  reveal:'<svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".5"/><rect x="2" y="4" width="7" height="8" rx="1.5" fill="currentColor"/></svg>',
+  move:'<svg viewBox="0 0 16 16"><path d="M1 12h14" stroke="currentColor" stroke-width="1.2" opacity=".5"/><rect x="8" y="5" width="5" height="5" rx="1" fill="currentColor"/><path d="M3 7.5h3M4.5 6l1.5 1.5L4.5 9" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  rotate:'<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v2.8h-2.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  fade:'<svg viewBox="0 0 16 16"><rect x="1.5" y="5" width="3.5" height="6" rx="1" fill="currentColor" opacity=".25"/><rect x="6.25" y="5" width="3.5" height="6" rx="1" fill="currentColor" opacity=".6"/><rect x="11" y="5" width="3.5" height="6" rx="1" fill="currentColor"/></svg>'
+};
+
+/* ---------- 數字格式正規化（Reeden 讀不懂 1.8.8、1-2 這類黏在一起的寫法） ---------- */
+const NUMRE=/^[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/;
+const fnum=x=>{const v=parseFloat(x); return String(Math.round(v*1e6)/1e6)};
+function normPath(d){
+  const n=d.length, counts={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7}; let i=0, cmd=null; const out=[];
+  const skip=()=>{while(i<n&&/[\s,]/.test(d[i]))i++};
+  const num=()=>{skip(); const m=NUMRE.exec(d.slice(i)); if(!m) throw 0; i+=m[0].length; return fnum(m[0])};
+  const flag=()=>{skip(); const c=d[i]; if(c!=='0'&&c!=='1') throw 0; i++; return c};
+  try{
+    while(true){ skip(); if(i>=n) break;
+      if(/[MmZzLlHhVvCcSsQqTtAa]/.test(d[i])){ cmd=d[i++]; out.push(cmd); if(/[Zz]/.test(cmd)) continue; }
+      else if(!cmd||/[Zz]/.test(cmd)) throw 0;
+      const U=cmd.toUpperCase(), vals=[];
+      for(let j=0;j<counts[U];j++) vals.push(U==='A'&&(j===3||j===4)?flag():num());
+      out.push(vals.join(' '));
+    }
+    return out.join(' ');
+  }catch(e){ return d }
+}
+function normNums(v){const m=v.match(/[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g); return m?m.map(fnum).join(' '):v}
+function normalizeSvg(txt){
+  return txt.replace(/(\s)(d|points|transform|viewBox)(\s*=\s*)(["'])([^"']*)\4/g,(m,sp,name,eq,q,val)=>{
+    if(/[{}]/.test(val)) return m;
+    let nv=val;
+    if(name==='d') nv=normPath(val);
+    else if(name==='transform') nv=val.replace(/\(([^)]*)\)/g,(mm,inner)=>'('+normNums(inner)+')');
+    else nv=normNums(val);
+    return sp+name+eq+q+nv+q;
+  });
+}
+function gluedNums(txt){
+  let bad=false;
+  txt.replace(/\s(d|points|transform|viewBox)\s*=\s*(["'])([^"']*)\2/g,(m,name,q,val)=>{
+    if(!/[{}]/.test(val)&&/\d*\.\d+\.\d|\d-[\d.]|(^|[^\d])\.\d/.test(val)) bad=true; return m});
+  return bad;
+}
+
+/* ---------- 上傳 SVG 解析與變化 ---------- */
+function parseUpload(txt){
+  const m=txt.match(/<svg\b[^>]*>/i), close=txt.lastIndexOf('</svg>'); if(!m||close<0) return null;
+  const tag=m[0];
+  const a=n=>{const r=tag.match(new RegExp('\\s'+n+'\\s*=\\s*["\']([^"\']*)["\']'));return r?r[1]:null};
+  let vb=null; const vbs=a('viewBox');
+  if(vbs){const p=vbs.trim().split(/[\s,]+/).map(Number); if(p.length===4&&p[2]>0&&p[3]>0) vb={x:p[0],y:p[1],w:p[2],h:p[3]}}
+  if(!vb){const W=parseFloat(a('width')),H=parseFloat(a('height')); if(W>0&&H>0&&!/%/.test(a('width')+a('height'))) vb={x:0,y:0,w:W,h:H}}
+  let attrs=tag.replace(/^<svg/i,'').replace(/\/?>$/,'')
+    .replace(/\s(width|height|viewBox)\s*=\s*["'][^"']*["']/g,'').trim();
+  if(!/xmlns\s*=/.test(attrs)) attrs=('xmlns="http://www.w3.org/2000/svg" '+attrs).trim();
+  return {attrs, vb, inner:txt.slice(m.index+tag.length,close)};
+}
+function recolor(inner,c){
+  return inner
+    .replace(/(\s(?:fill|stroke|stop-color)\s*=\s*["'])(?!none|transparent)([^"']*)(["'])/gi,(m,a,v,b)=>a+c+b)
+    .replace(/((?:fill|stroke|stop-color)\s*:\s*)(?!none|transparent)([^;"'}]+)/gi,(m,a)=>a+c);
+}
+function clipRect(vb,P,dir){
+  const H=vb.h, W=vb.w, aH=`{= ${H} * ${P} / 100}`, aW=`{= ${W} * ${P} / 100}`;
+  return {down:`x="${vb.x}" y="${vb.y}" width="${W}" height="${aH}"`,
+    up:`x="${vb.x}" y="{= ${r2(vb.y+H)} - ${H} * ${P} / 100}" width="${W}" height="${aH}"`,
+    lr:`x="${vb.x}" y="${vb.y}" width="${aW}" height="${H}"`,
+    rl:`x="{= ${r2(vb.x+W)} - ${W} * ${P} / 100}" y="${vb.y}" width="${aW}" height="${H}"`}[dir]||'';
+}
+function moveKind(){return S.src!=='none'&&S.fxs.includes('move')?(['lr','rl'].includes(S.mdir)?'h':'v'):'n'}
+function genUpload(){
+  const u=parseUpload(upRaw); if(!u) return upRaw;
+  const vb=u.vb||{x:0,y:0,w:100,h:100}, VB=`${vb.x} ${vb.y} ${vb.w} ${vb.h}`, P=S.src, inner=u.inner;
+  const open=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="${VB}">`;
+  if(P==='none'||!S.fxs.length) return `${open}${inner}</svg>`;
+  const has=f=>S.fxs.includes(f), cx=r2(vb.x+vb.w/2), cy=r2(vb.y+vb.h/2);
+  let defs='', layer=inner;
+  if(has('fill')){
+    const top=S.fc==='custom'?`<g fill="${S.fcolor}">${recolor(inner,S.fcolor)}</g>`:inner;
+    defs=`<clipPath id="reeden-fill"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
+    layer=`<g opacity="0.2">${inner}</g>\n  <g clip-path="url(#reeden-fill)">${top}</g>`;
+  } else if(has('reveal')){
+    defs=`<clipPath id="reeden-reveal"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
+    layer=`<g clip-path="url(#reeden-reveal)">${inner}</g>`;
+  }
+  if(has('rotate')) layer=`<g transform="rotate({= ${S.rot==='ccw'?'0 - ':''}${P} * 3.6} ${cx} ${cy})">\n  ${layer}\n  </g>`;
+  if(has('fade')) layer=`<g opacity="{= ${S.fade==='out'?`1 - ${P} / 100`:`${P} / 100`}}">\n  ${layer}\n  </g>`;
+  const body=(defs?`<defs>${defs}</defs>\n  `:'')+layer;
+  if(!has('move')) return `${open}\n  ${body}\n</svg>`;
+  const prog=['lr','down'].includes(S.mdir)?P:`(100 - ${P})`;
+  const outer=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="0 0 {w} {h}">`;
+  if(moveKind()==='h'){ const AR=r2(vb.w/vb.h);
+    return `${outer}\n  <g transform="translate({= (w - h * ${AR}) * ${prog} / 100} 0) scale({= h / ${vb.h}}) translate(${-vb.x} ${-vb.y})">\n  ${body}\n  </g>\n</svg>`; }
+  const IAR=r2(vb.h/vb.w);
+  return `${outer}\n  <g transform="translate(0 {= (h - w * ${IAR}) * ${prog} / 100}) scale({= w / ${vb.w}}) translate(${-vb.x} ${-vb.y})">\n  ${body}\n  </g>\n</svg>`;
+}
+function boxForUpload(){
+  const u=upRaw&&parseUpload(upRaw), vb=(u&&u.vb)||{w:200,h:200}, k=moveKind();
+  if(k==='h') return {x:28,y:SH-80,w:304,h:40};
+  if(k==='v') return {x:SW-58,y:110,w:36,h:540};
+  let w=Math.min(vb.w,240), h=w*vb.h/vb.w; if(h>480){h=480;w=h*vb.w/vb.h}
+  w=Math.max(4,Math.round(w)); h=Math.max(4,Math.round(h));
+  return {x:Math.round((SW-w)/2),y:Math.round((SH-h)/2),w,h};
+}
+
+/* ---------- 內建種類＋自己的 SVG ---------- */
+const ROLES={
+  bar:[['fill','圖案本身當進度條'],['marker','圖案當標記，沿著線走'],['both','進度條和標記都用我的圖案']],
+  barText:[['fill','圖案本身當進度條'],['marker','圖案當標記，沿著線走'],['both','進度條和標記都用我的圖案']],
+  ring:[['center','放在圓環中間'],['orbit','沿著圓環繞圈'],['bothOrbit','圓環和繞圈標記都用我的圖案'],['bothCenter','圓環和中間都用我的圖案']],
+  clock:[['face','當作鐘面，指針畫在上面']],
+  battery:[['fill','圖案本身當電池，由左往右填滿']],
+  text:[['sides','放在文字兩側'],['bg','墊在文字後面']]
+};
+function roleOf(k){const r=ROLES[k]; return r&&r.some(x=>x[0]===S.role)?S.role:(r?r[0][0]:'')}
+function artInfo(n){const raw=n===2?upRaw2:upRaw; const u=raw&&parseUpload(raw); if(!u) return null; const vb=u.vb||{x:0,y:0,w:100,h:100}; return {u,vb,VB:`${vb.x} ${vb.y} ${vb.w} ${vb.h}`,AR:r2(vb.w/vb.h)}}
+function boxForMine(k){
+  const a=artInfo(), AR=a?a.vb.w/a.vb.h:1, role=roleOf(k);
+  const fitW=(w,maxH)=>{let h=Math.round(w/AR); if(h>maxH){h=maxH} return Math.max(8,h)};
+  if((k==='bar'||k==='barText'||k==='battery')&&role==='fill'){const w=k==='battery'?64:337, h=fitW(k==='barText'?w-48:w,k==='battery'?40:60); return {x:k==='battery'?SW-64-20:28,y:k==='battery'?20:SH-60-h,w,h}}
+  if(k==='bar'||k==='barText') return {x:28,y:SH-96,w:337,h:30};
+  if(k==='ring') return {x:SW-80,y:14,w:64,h:64};
+  if(k==='clock') return {x:16,y:14,w:56,h:56};
+  if(k==='text') return role==='bg'?{x:80,y:30,w:200,h:Math.min(120,fitW(200,120))}:{x:60,y:44,w:240,h:40};
+  return Object.assign({},SHAPES[k].box);
+}
+function genMine(k,p){
+  const a=artInfo(); if(!a) return SHAPES[k].gen(p);
+  const {u,VB,AR}=a, inner=u.inner, P=p.src, role=roleOf(k), s=p.stroke, c=p.color, t=p.track;
+  const ex=v=>{v=String(v); const m=v.match(/^\{=\s*([\s\S]*?)\s*\}$/); if(m) return m[1]; const n=v.match(/^\{(\w+)\}$/); return n?n[1]:v};
+  const vbb=a.vb;
+  /* Reeden 不支援 SVG 裡再包 <svg>，改用 transform 把圖案縮放擺位 */
+  const N=(x,y,w,h,extra)=>{ const X=ex(x),Y=ex(y),W2=ex(w),H2=ex(h);
+    if(extra) return `<g transform="translate({= ${X}} {= ${Y}}) scale({= (${W2}) / ${vbb.w}} {= (${H2}) / ${vbb.h}}) translate(${-vbb.x} ${-vbb.y})">${inner}</g>`;
+    return `<g transform="translate({= ${X} + ((${W2}) - ${vbb.w} * (${H2}) / ${vbb.h}) / 2} {= ${Y}}) scale({= (${H2}) / ${vbb.h}}) translate(${-vbb.x} ${-vbb.y})">${inner}</g>`; };
+  const open=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="0 0 {w} {h}">`;
+  const pctTxt={chapterPct:'{chapterPct}%',bookPct:'{bookPct}%',batteryPct:'{batteryPct}%'}[P]||'';
+  const txt=k==='barText'?`\n  <text x="{w}" y="{= h/2 + h * 0.18}" text-anchor="end" font-size="{= h * 0.5}" fill="${c}">${pctTxt}</text>`:'';
+  const W=k==='barText'?'(w - 48)':'w';
+  if(role==='both'&&artInfo(2)){
+    const b=artInfo(2), vb=a.vb, vb2=b.vb, AR2=b.AR;
+    const T=`<g transform="translate({= h * ${AR2} / 2} {= h * 0.25}) scale({= (${W} - h * ${AR2}) / ${vb.w}} {= h * 0.5 / ${vb.h}}) translate(${-vb.x} ${-vb.y})">${inner}</g>`;
+    const M=`<g transform="translate({= (${W} - h * ${AR2}) * ${P} / 100} {= 0}) scale({= h / ${vb2.h}}) translate(${-vb2.x} ${-vb2.y})">${b.u.inner}</g>`;
+    return `${open}
+  <g opacity="${t}">${T}</g>
+  <defs><clipPath id="reeden-bar"><rect x="0" y="0" width="{= h * ${AR2} / 2 + (${W} - h * ${AR2}) * ${P} / 100}" height="{h}"/></clipPath></defs>
+  <g clip-path="url(#reeden-bar)">${T}</g>
+  ${M}${txt}
+</svg>`;
+  }
+  if(role==='fill'||role==='both') return `${open}
+  <g opacity="${t}">${N(0,0,`{= ${W}}`,'{h}',' preserveAspectRatio="none"')}</g>
+  <defs><clipPath id="reeden-bar"><rect x="0" y="0" width="{= ${W} * ${P} / 100}" height="{h}"/></clipPath></defs>
+  <g clip-path="url(#reeden-bar)">${N(0,0,`{= ${W}}`,'{h}',' preserveAspectRatio="none"')}</g>${txt}
+</svg>`;
+  if(role==='marker') return `${open}
+  <rect x="{= h * ${AR} / 2}" y="{= h/2 - ${r2(s/2)}}" width="{= ${W} - h * ${AR}}" height="${s}" rx="${r2(s/2)}" fill="${c}" fill-opacity="${t}"/>
+  <rect x="{= h * ${AR} / 2}" y="{= h/2 - ${r2(s/2)}}" width="{= (${W} - h * ${AR}) * ${P} / 100}" height="${s}" rx="${r2(s/2)}" fill="${c}"/>
+  ${N(`{= (${W} - h * ${AR}) * ${P} / 100}`,0,`{= h * ${AR}}`,'{h}')}${txt}
+</svg>`;
+  if(k==='ring'&&(role==='bothOrbit'||role==='bothCenter')){
+    const b=artInfo(2), vb2=b?b.vb:null, AR2=b?b.AR:1, ring=N('0','0','w','h'), sw=s;
+    if(role==='bothOrbit') return `${open}
+  ${ring}${b?`
+  <g transform="rotate({= ${P} * 3.6} {= w/2} {= h/2})"><g transform="translate({= w/2 - h * 0.15 * ${AR2}} {= 0}) scale({= h * 0.3 / ${vb2.h}}) translate(${-vb2.x} ${-vb2.y})">${b.u.inner}</g></g>`:''}
+</svg>`;
+    return `${open}
+  <g opacity="${Math.max(t,0.15)}">${ring}</g>
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h * 0.46}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="{= 6.2832 * h * 0.46 * ${P} / 100} 9999" transform="rotate(-90 {= w/2} {= h/2})"/>${b?`
+  <g transform="translate({= w/2 - h * 0.27 * ${AR2}} {= h/2 - h * 0.27}) scale({= h * 0.54 / ${vb2.h}}) translate(${-vb2.x} ${-vb2.y})">${b.u.inner}</g>`:''}
+</svg>`;
+  }
+  if(k==='ring'){ const sw=s+1;
+    if(role==='center') return `${open}
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h/2 - ${sw}}" fill="none" stroke="${c}" stroke-opacity="${t}" stroke-width="${sw}"/>
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h/2 - ${sw}}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="{= 6.2832 * (h/2 - ${sw}) * ${P} / 100} 9999" transform="rotate(-90 {= w/2} {= h/2})"/>
+  ${N('{= w/2 - h * 0.27}','{= h/2 - h * 0.27}','{= h * 0.54}','{= h * 0.54}')}
+</svg>`;
+    return `${open}
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h * 0.35}" fill="none" stroke="${c}" stroke-opacity="${t}" stroke-width="${sw}"/>
+  <circle cx="{= w/2}" cy="{= h/2}" r="{= h * 0.35}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="{= 6.2832 * h * 0.35 * ${P} / 100} 9999" transform="rotate(-90 {= w/2} {= h/2})"/>
+  <g transform="rotate({= ${P} * 3.6} {= w/2} {= h/2})">${N('{= w/2 - h * 0.15}',0,'{= h * 0.3}','{= h * 0.3}')}</g>
+</svg>`;}
+  if(k==='clock') return `${open}
+  ${N(0,0,'{w}','{h}')}
+  <line x1="{= w/2}" y1="{= h/2}" x2="{= w/2}" y2="{= h/2 - h * 0.22}" stroke="${c}" stroke-width="${r2(s*1.5)}" stroke-linecap="round" transform="rotate({hourDeg} {= w/2} {= h/2})"/>
+  <line x1="{= w/2}" y1="{= h/2}" x2="{= w/2}" y2="{= h/2 - h * 0.34}" stroke="${c}" stroke-width="${s}" stroke-linecap="round" transform="rotate({minuteDeg} {= w/2} {= h/2})"/>
+  <circle cx="{= w/2}" cy="{= h/2}" r="${r2(s*1.2)}" fill="${c}"/>
+</svg>`;
+  if(k==='text'){ const T=(TXT.find(x=>x[0]===p.txt)||TXT[0])[2];
+    const text=`<text x="{= w/2}" y="{= h/2 + em * 0.28}" text-anchor="middle" font-size="{= em * 0.8}" letter-spacing="2" fill="${c}">${T}</text>`;
+    if(role==='bg') return `${open}
+  ${N(0,0,'{w}','{h}')}
+  ${text}
+</svg>`;
+    return `${open}
+  ${N(0,0,`{= h * ${AR}}`,'{h}')}
+  ${N(`{= w - h * ${AR}}`,0,`{= h * ${AR}}`,'{h}')}
+  ${text}
+</svg>`;}
+  return SHAPES[k].gen(p);
+}
+const SOURCES=[
+  ['Koboyo','https://koboyo.com/icons','手繪卡通圖示，風格可愛。免費商用、不用標註作者；不能把圖示重新打包成圖示庫轉發。'],
+  ['Openclipart','https://openclipart.org','大量插圖，全部 CC0 公眾領域，商用、修改都可以，不用標註。'],
+  ['Doodle Icons','https://khushmeen.gumroad.com/l/doodleicons','手繪塗鴉風圖示包，0 元下載。免費商用、不用標註。'],
+  ['Open Doodles','https://opendoodles.com','塗鴉風人物插畫，CC0 公眾領域，不用標註。'],
+  ['Fluent Emoji（Microsoft）','https://github.com/microsoft/fluentui-emoji','可愛表情符號，選 Flat 版有 SVG。MIT 授權，可商用。'],
+  ['SVG Repo','https://www.svgrepo.com','數量最多，但每個圖示授權不同。下載前看頁面上的授權，選「SVG Repo License」或「Public Domain」最省事；CC BY 要標註作者，BY-NC 不能商用。']
+];
+function svgSources(){
+  const d=document.createElement('details'); d.className='srcs';
+  d.innerHTML='<summary>去哪裡找免費的 SVG？</summary>';
+  const ul=document.createElement('ul');
+  SOURCES.forEach(([n,u,t])=>{const li=document.createElement('li'); const a=document.createElement('a'); a.href=u; a.target='_blank'; a.rel='noopener'; a.textContent=n;
+    const sp=document.createElement('span'); sp.className='lic'; sp.textContent=t; li.appendChild(a); li.appendChild(sp); ul.appendChild(li)});
+  const n=document.createElement('p'); n.className='hint'; n.style.marginTop='8px'; n.textContent='很多網站在圖示頁面有「複製 SVG」或「Copy SVG」按鈕，複製後直接貼到上面的框就好；沒有的話再下載 .svg 檔上傳。黏在一起的數字會自動修正。授權以各網站最新說明為準。';
+  d.appendChild(ul); d.appendChild(n); return d;
+}
+function pasteArea(compact,slot){
+  slot=slot||1;
+  const t=document.createElement('textarea'); t.className='pastebox'; t.spellcheck=false; t.setAttribute('aria-label','貼上 SVG code');
+  t.placeholder=compact?'或貼上另一段 SVG code 直接替換':'在網站上按「複製 SVG」，直接貼在這裡，不用下載';
+  if(compact) t.style.minHeight='44px';
+  const take=txt=>{ if(/<svg\b/i.test(txt)&&/<\/svg>/i.test(txt)){ loadSvg(txt,'貼上的 SVG',slot); return true } return false };
+  t.addEventListener('paste',e=>{const txt=(e.clipboardData||window.clipboardData).getData('text'); if(take(txt)) e.preventDefault(); else setTimeout(()=>{ if(t.value.trim()&&!/<svg\b/i.test(t.value)) toast('貼上的內容裡找不到 <svg>，請確認複製的是 SVG code') },0)});
+  t.addEventListener('input',()=>{ if(take(t.value)) t.value='' });
+  return t;
+}
+function uploadBox(slot){
+  slot=slot||1;
+  const d=document.createElement('div'); d.className='drop'; d.id='drop'; d.dataset.slot=slot;
+  d.innerHTML='<span>把 .svg 檔拖到這裡，或</span>';
+  d.style.gap='12px';
+  const b=document.createElement('button'); b.type='button'; b.className='btn primary'; b.textContent='選擇 SVG 檔'; b.onclick=()=>{slotTarget=slot; $('file').click()};
+  d.appendChild(b); d.appendChild(pasteArea(false,slot)); d.appendChild(sub('Illustrator、Figma 匯出的 SVG 都可以')); d.appendChild(svgSources()); return d;
+}
+function fileRow(slot){
+  slot=slot||1;
+  const fr=document.createElement('div'); fr.className='filerow';
+  const nm=document.createElement('b'); nm.textContent='已載入：'+((slot===2?upName2:upName)||'你的 SVG');
+  const ch=document.createElement('button'); ch.type='button'; ch.className='btn small'; ch.textContent='換一個檔案'; ch.onclick=()=>{slotTarget=slot; $('file').click()};
+  fr.appendChild(nm); fr.appendChild(ch);
+  const wrap=document.createElement('div'); wrap.className='col'; wrap.style.gap='6px'; wrap.appendChild(fr);
+  if(slot===1) wrap.appendChild(sub('圖案越大、細節越多，框就要拉得越大。貼進 Reeden 後記得照預覽下方的建議尺寸設定框，不然圖會縮得很小。'));
+  wrap.appendChild(pasteArea(true,slot));
+  if(slot===1) wrap.appendChild(svgSources());
+  return wrap;
+}
+function buildStyleRow(){
+  const w=$('styleRow'); w.innerHTML='';
+  if(S.tpl==='upload') return;
+  w.appendChild(sub('樣式'));
+  w.appendChild(optRow([['builtin','用內建樣式'],['mine','用我自己的 SVG']],S.style,v=>{S.style=v; S.box=v==='mine'&&upRaw?boxForMine(S.tpl):Object.assign({},SHAPES[S.tpl].box); regen(); refresh()}));
+  if(S.style!=='mine') return;
+  const roles=ROLES[S.tpl]||[];
+  if(roles.length>1){ w.appendChild(sub('你的圖案要怎麼用？')); w.appendChild(optRow(roles,roleOf(S.tpl),v=>{S.role=v; S.box=boxForMine(S.tpl); regen(); refresh()})); }
+  else if(roles.length===1) w.appendChild(sub('你的圖案會'+roles[0][1]+'。'));
+  const head=t=>{const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.style.fontWeight='500'; h.textContent=t; return h};
+  const rl=roleOf(S.tpl);
+  if(rl.startsWith('both')){
+    const L={both:['① 進度條圖案（會被拉長成跑道）','② 標記圖案（沿著進度條走）'],bothOrbit:['① 圓環圖案（當作底圖）','② 標記圖案（跟著進度繞圈）'],bothCenter:['① 圓環圖案（淡淡的底，上面會畫進度弧線）','② 中間的圖案']}[rl];
+    w.appendChild(head(L[0]));
+    w.appendChild(upRaw?fileRow(1):uploadBox(1));
+    w.appendChild(head(L[1]));
+    w.appendChild(upRaw2?fileRow(2):uploadBox(2));
+    if(!upRaw2) w.appendChild(sub('第二張圖還沒上傳時，預覽會先只顯示第一張。'));
+    return;
+  }
+  w.appendChild(upRaw?fileRow(1):uploadBox(1));
+}
+
+/* ---------- 產生 code ---------- */
+function regen(){
+  if(S.tpl==='upload'){ if(upRaw) code.value=genUpload(); }
+  else { const p={color:S.color,stroke:S.stroke,track:S.track,src:S.src,txt:S.txt};
+    code.value=(S.style==='mine'&&upRaw)?genMine(S.tpl,p):SHAPES[S.tpl].gen(p); }
+  save();
+}
+
+/* ---------- 第 1 步 UI ---------- */
+const code=$('code'), img=$('ovlImg'), ovl=$('ovl'), tplWrap=$('tpls');
+Object.entries(SHAPES).forEach(([k,t])=>{
+  const b=document.createElement('button'); b.type='button'; b.className='tpl'; b.dataset.k=k;
+  b.innerHTML='<span class="glyph">'+GLYPH[k]+'</span><b>'+t.name+'</b>';
+  b.onclick=()=>pickShape(k); tplWrap.appendChild(b);
+});
+function pickShape(k){
+  if(k==='upload'&&!upRaw){ S.tpl='upload'; S.src='none'; refresh(); $('file').click(); return }
+  S.tpl=k; S.role='';
+  if(k==='upload'){ S.src=S.src&&S.src!=='none'&&PCT.some(p=>p[0]===S.src)?S.src:'none'; S.box=boxForUpload(); }
+  else { if(SHAPES[k].src) S.src=SHAPES[k].src; S.box=(S.style==='mine'&&upRaw)?boxForMine(k):Object.assign({},SHAPES[k].box); }
+  regen(); refresh();
+}
+
+/* ---------- 第 2 步 UI ---------- */
+function optRow(list,cur,onPick,icons){
+  const r=document.createElement('div'); r.className='opts'; r.setAttribute('role','group');
+  list.forEach(([v,l])=>{const b=document.createElement('button'); b.type='button'; b.className='opt'; b.setAttribute('aria-pressed',Array.isArray(cur)?cur.includes(v):v===cur);
+    b.innerHTML=(icons&&icons[v]?icons[v]:'')+'<span></span>'; b.querySelector('span').textContent=l; b.onclick=()=>onPick(v); r.appendChild(b)});
+  return r;
+}
+function sub(t){const p=document.createElement('p'); p.className='sub'; p.textContent=t; return p}
+function buildStep2(){
+  const w=$('step2'); w.innerHTML=''; const sh=SHAPES[S.tpl]; $('q2t').textContent=sh.q;
+  if(S.tpl==='clock'){ w.appendChild(sub('時針和分針會自動跟著目前時間轉動，不用另外設定。到右邊「模擬數值」改時間就能看效果。')); return }
+  if(S.tpl==='text'){ w.appendChild(optRow(TXT.map(x=>[x[0],x[1]]),S.txt,v=>{S.txt=v;regen();refresh()})); w.appendChild(sub('文字會跟著閱讀狀態自動更新。')); return }
+  if(S.tpl==='upload'){
+    if(!upRaw){ w.appendChild(uploadBox()); return }
+    w.appendChild(fileRow());
+    w.appendChild(sub('跟著什麼變化？'));
+    const keep=fn=>v=>{const k0=moveKind(); fn(v); if(moveKind()!==k0) S.box=boxForUpload(); regen(); refresh()};
+    w.appendChild(optRow([['none','不變化'],...PCT],S.src,keep(v=>S.src=v)));
+    if(S.src!=='none'){
+      w.appendChild(sub('怎麼變化？可以複選，例如填滿＋旋轉'));
+      w.appendChild(optRow(FX,S.fxs,keep(v=>{
+        if(S.fxs.includes(v)){ if(S.fxs.length>1) S.fxs=S.fxs.filter(x=>x!==v); else toast('至少要留一種變化'); }
+        else { S.fxs=S.fxs.filter(x=>!((v==='fill'&&x==='reveal')||(v==='reveal'&&x==='fill'))).concat(v); }
+      }),FXICON));
+      if(S.fxs.includes('fill')||S.fxs.includes('reveal')) w.appendChild(sub('「填滿」和「出現」只能二選一，其他都可以疊加。'));
+      const block=(title,row,note)=>{const g=document.createElement('div'); g.className='col'; g.style.gap='8px'; g.style.borderLeft='1px solid var(--line)'; g.style.paddingLeft='12px';
+        const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.textContent=title; g.appendChild(h); g.appendChild(row); if(note) g.appendChild(note); w.appendChild(g); return g};
+      FX.map(f=>f[0]).filter(f=>S.fxs.includes(f)).forEach(f=>{
+        if(f==='fill'){
+          const g=block('填滿：從哪個方向？',optRow(DIR,S.dir,keep(v=>S.dir=v),DIRICON));
+          const crow=optRow([['orig','原本的顏色'],['custom','自訂顏色']],S.fc,keep(v=>S.fc=v));
+          if(S.fc==='custom'){
+            const ci=document.createElement('input'); ci.type='color'; ci.id='fcolor'; ci.value=S.fcolor==='currentColor'?S.rfg:S.fcolor; ci.setAttribute('aria-label','填滿的顏色');
+            ci.oninput=e=>{S.fcolor=e.target.value.toUpperCase(); regen(); render()};
+            const ub=document.createElement('button'); ub.type='button'; ub.className='btn small'; ub.textContent='跟著閱讀頁文字色';
+            ub.onclick=()=>{S.fcolor='currentColor'; ci.value=S.rfg; regen(); render(); toast('填滿色改成跟著閱讀頁文字色')};
+            crow.appendChild(ci); crow.appendChild(ub);
+          }
+          const h2=document.createElement('p'); h2.className='sub'; h2.style.color='var(--fg)'; h2.textContent='填滿的顏色'; g.appendChild(h2); g.appendChild(crow);
+          g.appendChild(sub('淡淡的底圖保留原本顏色，漲上來的部分換成這個顏色。'));
+        }
+        if(f==='reveal') block('出現：從哪個方向？',optRow(DIR,S.dir,keep(v=>S.dir=v),DIRICON));
+        if(f==='move') block('移動：往哪個方向？',optRow(MDIR,S.mdir,keep(v=>S.mdir=v),DIRICON),sub(moveKind()==='h'?'框會變成一條橫向跑道，可以拉長或拉高框調整。':'框會變成一條直向跑道，可以拉長或拉寬框調整。'));
+        if(f==='rotate') block('旋轉：往哪個方向轉？',optRow(ROT,S.rot,keep(v=>S.rot=v),ROTICON));
+        if(f==='fade') block('淡入淡出：哪一種？',optRow(FADE,S.fade,keep(v=>S.fade=v)));
+      });
+    }
+    return;
+  }
+  w.appendChild(optRow(PCT,S.src,v=>{S.src=v;regen();refresh()}));
+}
+function refresh(){
+  tplWrap.querySelectorAll('.tpl').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===S.tpl));
+  buildStyleRow(); buildStep2();
+  $('step3').hidden=S.tpl==='upload';
+  syncBox(); render();
+}
+
+/* ---------- 上傳 ---------- */
+function loadSvg(txt,name,slot){
+  slot=slot||1;
+  txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[\s\S]*?>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
+  const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
+  const before=txt; txt=normalizeSvg(txt); const fixed=before!==txt;
+  if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100); return }
+  upRaw=txt; upName=name||'';
+  if(S.tpl!=='upload'){ S.style='mine'; S.box=boxForMine(S.tpl); }
+  else { S.src='none'; S.box=boxForUpload(); }
+  regen(); refresh();
+  if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100);
+  toast(u.vb?(S.tpl==='upload'?'已載入，接著選它要怎麼變化':'已載入，已套用成你的樣式'):'已載入，但檔案沒有 viewBox，比例可能不準');
+}
+function autoSlot(){return (S.tpl!=='upload'&&S.style==='mine'&&roleOf(S.tpl).startsWith('both')&&upRaw&&!upRaw2)?2:1}
+function readFile(f){
+  if(!f) return;
+  if(!/svg/i.test(f.type)&&!/\.svg$/i.test(f.name)){toast('請選擇 .svg 檔');return}
+  if(f.size>2*1024*1024){toast('檔案超過 2MB，請先精簡再上傳');return}
+  const slot=slotTarget; slotTarget=autoSlot(); const r=new FileReader(); r.onload=()=>loadSvg(String(r.result),f.name,slot); r.onerror=()=>toast('讀取檔案失敗，請再試一次'); r.readAsText(f);
+}
+$('file').onchange=e=>{readFile(e.target.files[0]); e.target.value=''};
+document.addEventListener('paste',e=>{
+  const tg=e.target; if(tg&&(tg.tagName==='TEXTAREA'||tg.tagName==='INPUT')) return;
+  if(!(S.tpl==='upload'||S.style==='mine')) return;
+  const txt=(e.clipboardData||window.clipboardData).getData('text'); if(/<svg\b/i.test(txt)&&/<\/svg>/i.test(txt)){ e.preventDefault(); loadSvg(txt,'貼上的 SVG',autoSlot()) }
+});
+window.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault(); const d=$('drop'); if(d) d.classList.add('over')}});
+window.addEventListener('dragleave',e=>{if(!e.relatedTarget){const d=$('drop'); if(d) d.classList.remove('over')}});
+window.addEventListener('drop',e=>{if(e.dataTransfer.files.length){e.preventDefault(); const dz=e.target.closest&&e.target.closest('.drop'); slotTarget=dz&&dz.dataset.slot?+dz.dataset.slot:autoSlot(); readFile(e.dataTransfer.files[0])}});
+
+/* ---------- 變數（進階） ---------- */
+const GROUPS_SIMPLE=[
+  {t:'讓圖形跟著變',d:'放進寬度、位置或角度',k:[{c:'= w * chapterPct / 100',l:'隨章節進度變長'},{c:'= w * bookPct / 100',l:'隨全書進度變長'},{c:'= w * batteryPct / 100',l:'隨電量變長'},{c:'hourDeg',l:'時針角度'},{c:'minuteDeg',l:'分針角度'}]},
+  {t:'顯示文字',d:'放在 <text> 裡',k:[{c:'time',l:'時間'},{c:'chapter',l:'章節名'},{c:'book',l:'書名'},{c:'percent',l:'章節進度 %'},{c:'battery',l:'電量 %'},{c:'chapterCn',l:'中文章號'}]},
+  {t:'框的大小與位置',d:'讓圖形貼齊框',k:[{c:'w',l:'框的寬'},{c:'h',l:'框的高'},{c:'= w / 2',l:'水平置中'},{c:'= h / 2',l:'垂直置中'}]}
+];
+const LABEL={time:'時間',time12:'12 小時制',chapter:'章節名',volume:'卷名',book:'書名',author:'作者',page:'章節當前頁',total:'章節總頁數',percent:'章節進度',battery:'電量',batteryNumber:'電量數字',remaining:'本章剩餘頁',bookPage:'全書當前頁',bookTotal:'全書總頁',bookPercent:'全書進度',chapterRemainingTime:'本章剩餘時間',bookRemainingTime:'全書剩餘時間',chapterNumber:'章節序號',chapterTotal:'章節總數',todayReadingTime:'當日閱讀',remainingChapters:'剩餘章節',chapterPct:'章節 0–100',bookPct:'全書 0–100',batteryPct:'電量 0–100',hour:'小時 0–23',minute:'分鐘 0–59',hourDeg:'時針角度',minuteDeg:'分針角度',w:'寬',h:'高',em:'字號',chapterCn:'章號',chapterCnFormal:'章號大寫',pageCn:'頁碼',totalCn:'總頁數'};
+const GROUPS=[
+  {t:'文字',k:['time','time12','chapter','volume','book','author','page','total','percent','battery','batteryNumber','remaining','bookPage','bookTotal','bookPercent','chapterRemainingTime','bookRemainingTime','chapterNumber','chapterTotal','todayReadingTime','remainingChapters']},
+  {t:'數值 0–100、時間、角度',k:['chapterPct','bookPct','batteryPct','hour','minute','hourDeg','minuteDeg']},
+  {t:'尺寸',k:['w','h','em']},
+  {t:'中文數字',k:['chapterCn','chapterCnFormal','pageCn','totalCn']}
+];
+let showAll=false; const varWrap=$('vars');
+function buildVars(){
+  varWrap.innerHTML='';
+  (showAll?GROUPS.map(g=>({t:g.t,k:g.k.map(k=>({c:k,l:LABEL[k]}))})):GROUPS_SIMPLE).forEach(g=>{
+    const sec=document.createElement('div'); sec.className='vargroup';
+    const h=document.createElement('h3'); h.textContent=g.t+(g.d?'　':''); if(g.d){const s=document.createElement('span'); s.className='hint'; s.style.fontWeight='400'; s.textContent=g.d; h.appendChild(s)} sec.appendChild(h);
+    const c=document.createElement('div'); c.className='chips';
+    g.k.forEach(x=>{const b=document.createElement('button'); b.type='button'; b.className='chip'; b.dataset.k=x.c;
+      b.innerHTML='<b></b><code></code>'; b.querySelector('b').textContent=x.l; b.querySelector('code').textContent='{'+x.c+'}';
+      b.onclick=()=>{const s=code.selectionStart,e=code.selectionEnd; code.setRangeText('{'+x.c+'}',s,e,'end'); code.focus(); render(); save()}; c.appendChild(b)});
+    sec.appendChild(c); varWrap.appendChild(sec);
+  });
+  const t=document.createElement('button'); t.type='button'; t.className='btn small'; t.style.alignSelf='flex-start';
+  t.textContent=showAll?'只看常用':'顯示全部變數'; t.onclick=()=>{showAll=!showAll;buildVars()}; varWrap.appendChild(t);
+}
+
+/* ---------- 範例內文 ---------- */
+const PARAS=['雨是從傍晚開始下的。起初只是屋簷上零零落落的幾聲，後來連成了一片，把整條巷子都包進一種濕潤的安靜裡。','她把燈調暗了一點，翻開那本放了很久的書。書頁有些泛黃，邊角捲起，像是被誰在很多個夜裡反覆讀過。','窗外偶爾有車經過，輪胎碾過積水的聲音拉得很長，又慢慢遠去。她讀到第三頁時，忽然想起，自己已經很久沒有這樣只為一本書停下來了。','茶涼了，她沒有起身去換。故事裡的人正走過一座橋，橋下的水很急，夜色很深，可是那人始終沒有回頭。','她想，也許有些路本來就是要一個人走完的。雨聲裡，時間像被拉得很薄很薄，薄到可以一頁一頁地翻過去。'];
+
+/* ---------- 渲染 ---------- */
+function render(){
+  const V=vars();
+  $('rHead').textContent=V.text.chapter; $('fBook').textContent=V.text.time; $('fPct').textContent=V.num.bookPage+' / '+V.num.bookTotal+'   '+V.text.bookPercent; $('fTime').textContent=V.num.page+' / '+V.num.total;
+  $('screen').style.setProperty('--rbg',S.rbg); $('screen').style.setProperty('--rfg',S.rfg);
+  $('rBody').style.fontSize=S.fs+'px'; $('rBody').style.lineHeight=(S.fs*1.75)+'px';
+  $('oChap').textContent=S.chap+'%'; $('oBook').textContent=S.book+'%'; $('oBat').textContent=S.bat+'%'; $('oFs').textContent=S.fs;
+  ovl.style.left=S.box.x+'px'; ovl.style.top=S.box.y+'px'; ovl.style.width=S.box.w+'px'; ovl.style.height=S.box.h+'px';
+  const pw=Math.round(S.box.w/SW*1000)/10, ph=Math.round(S.box.h/SH*1000)/10;
+  $('dims').textContent='{w} = '+Math.round(S.box.w*10)/10+'　{h} = '+Math.round(S.box.h*10)/10+'　{em} = '+S.em;
+
+
+  const pl=Math.round(S.box.x/SW*1000)/10, pt=Math.round(S.box.y/SH*1000)/10;
+  const bh='貼進 Reeden 後，新的疊加層會出現在畫面中間。先用手指把框<b>隨便拖離中間</b>，編輯畫面才會出現左邊距、上邊距；再打開編輯畫面，照這樣填：<b>寬度 '+pw+'%</b>、<b>左邊距 '+pl+'%</b>、<b>上邊距 '+pt+'%</b>、<b>高度 '+ph+'%</b>，縮放模式選<b>「'+(S.fit==='stretch'?'拉伸鋪滿':'保持比例')+'」</b>。';
+  $('boxHint').innerHTML=bh; $('boxHint2').innerHTML=bh;
+  const msgs=[];
+  if(S.tpl==='upload'&&!upRaw&&!code.value.trim()){ img.removeAttribute('src'); $('status').innerHTML='<span class="hint">還沒有上傳 SVG</span>'; return }
+  const {out,errs,unknown}=substitute(code.value);
+  let svg=out.trim();
+  if(svg&&!/xmlns\s*=/.test(svg)) svg=svg.replace(/<svg\b/,'<svg xmlns="http://www.w3.org/2000/svg"');
+  /* 模擬 Reeden 的 SVG 解析器 */
+  let nested=false;
+  if(svg){ const first=svg.indexOf('<svg'); nested=/<svg\b/.test(svg.slice(first+4)); }
+  if(nested) msgs.push(['err','Reeden 不支援在 SVG 裡再包一層 <svg>，整張不會顯示']);
+  if(/\sdominant-baseline\s*=/.test(svg)){ msgs.push(['note2','Reeden 不支援 dominant-baseline，文字會改以基線對齊']); svg=svg.replace(/\sdominant-baseline\s*=\s*["'][^"']*["']/g,''); }
+  if(/\sfont-family\s*=/.test(svg)) msgs.push(['note2','Reeden 會用系統字型，font-family 不會生效']);
+  if(svg) svg=svg.replace(/(<svg\b[^>]*>)/,'$1<style>text{font-family:-apple-system,"PingFang TC","Helvetica Neue",sans-serif !important}</style>');
+  if(svg&&S.fit==='stretch') svg=svg.replace(/(<svg\b[^>]*?)\s*preserveAspectRatio\s*=\s*["'][^"']*["']/,'$1').replace(/<svg\b/,'<svg preserveAspectRatio="none"');
+  /* Reeden 的 currentColor 等於閱讀頁文字色 */
+  if(svg&&!/^[^>]*\scolor\s*=/.test(svg.slice(svg.indexOf('<svg')))) svg=svg.replace(/<svg\b/,'<svg color="'+S.rfg+'"');
+  /* Reeden 會把 SVG 等比縮放、置中放進框裡：沒有 viewBox 時用 width/height 當原始尺寸 */
+  { const m=svg.match(/<svg\b[^>]*>/); if(m&&!/\sviewBox\s*=/.test(m[0])){ const W=parseFloat((m[0].match(/\swidth\s*=\s*["']([\d.]+)/)||[])[1]), H=parseFloat((m[0].match(/\sheight\s*=\s*["']([\d.]+)/)||[])[1]); if(W>0&&H>0) svg=svg.replace(/<svg\b/,'<svg viewBox="0 0 '+W+' '+H+'"'); } }
+  const doc=new DOMParser().parseFromString(svg||'<x/>','image/svg+xml'), pe=doc.getElementsByTagName('parsererror')[0];
+  if(!svg) msgs.push(['err','code 是空的']);
+  else if(pe) msgs.push(['err','SVG 格式有誤：'+((pe.textContent||'').split('\n').find(l=>l.trim())||'')]);
+  else if(doc.documentElement.nodeName.toLowerCase()!=='svg') msgs.push(['err','最外層需要是 <svg> 標籤']);
+  errs.forEach(e=>msgs.push(['err',e]));
+  if(unknown.length) msgs.push(['err','不認得的變數：'+unknown.map(u=>'{'+u+'}').join(' ')]);
+  const glued=gluedNums(code.value);
+  if(glued) msgs.push(['err','有數字黏在一起（例如 1.8.8 或 1-2），Reeden 會整張不畫']);
+  if(!msgs.some(m=>m[0]==='err')) msgs.unshift(['ok','✓ 可以正常顯示']);
+  if(nested) img.removeAttribute('src');
+  else if(!pe&&svg) img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(doc));
+  $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動拆開</button></span>':'');
+  const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已拆開黏在一起的數字')};
+}
+function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
+
+/* ---------- 儲存 ---------- */
+function save(){try{localStorage.setItem(KEY,JSON.stringify({S,code:code.value,upRaw,upName,upRaw2,upName2}))}catch(e){}}
+let savedCode=null;
+try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''}}catch(e){}
+if(!SHAPES[S.tpl]) S.tpl='bar';
+if(!Array.isArray(S.fxs)) S.fxs=[S.fx==='fillLR'?'fill':(S.fx||'fill')]; if(S.fx==='fillLR') S.dir='lr'; S.mdir=S.mdir||'lr'; if(!S.dir) S.dir='up'; S.style=S.style||'builtin'; S.rot=S.rot||'cw'; S.fade=S.fade||'in'; S.fc=S.fc||'orig'; S.fcolor=S.fcolor||'#2B2A27';
+
+/* ---------- 手機縮放 ---------- */
+let scale=1;
+function fit(){const w=$('stage').clientWidth; scale=Math.min(1,w/417); $('phone').style.transform='scale('+scale+')'; $('stageInner').style.width=(417*scale)+'px'; $('stageInner').style.height=(876*scale)+'px'}
+new ResizeObserver(fit).observe($('stage'));
+
+/* ---------- 拖曳 / 縮放 ---------- */
+ovl.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('.h'); const mode=h?(h.classList.contains('br')?'br':h.classList.contains('r')?'r':'b'):'move';
+  const sx=e.clientX, sy=e.clientY, b0=Object.assign({},S.box); ovl.setPointerCapture(e.pointerId); e.preventDefault();
+  const mv=ev=>{const dx=(ev.clientX-sx)/scale, dy=(ev.clientY-sy)/scale;
+    if(mode==='move'){S.box.x=Math.round(Math.min(SW-8,Math.max(8-b0.w,b0.x+dx))); S.box.y=Math.round(Math.min(SH-8,Math.max(8-b0.h,b0.y+dy)))}
+    if(mode==='br'||mode==='r') S.box.w=Math.round(Math.max(4,b0.w+dx));
+    if(mode==='br'||mode==='b') S.box.h=Math.round(Math.max(4,b0.h+dy));
+    syncBox(); render();};
+  const up=()=>{ovl.removeEventListener('pointermove',mv);ovl.removeEventListener('pointerup',up);ovl.removeEventListener('pointercancel',up);save()};
+  ovl.addEventListener('pointermove',mv); ovl.addEventListener('pointerup',up); ovl.addEventListener('pointercancel',up);
+});
+['bx','by','bw','bh'].forEach((id,i)=>$(id).addEventListener('input',e=>{const v=parseFloat(e.target.value); if(isNaN(v))return; const k=['x','y','w','h'][i], base=(k==='x'||k==='w')?SW:SH; S.box[k]=v/100*base; if(k==='w'||k==='h') S.box[k]=Math.max(4,S.box[k]); render(); save();}));
+
+/* ---------- 控制項 ---------- */
+code.addEventListener('input',()=>{render();save()});
+code.addEventListener('keydown',e=>{if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();code.setRangeText('  ',code.selectionStart,code.selectionEnd,'end');render()}});
+$('reset').onclick=()=>{regen();render();toast('已還原成依上面選項產生的 code')};
+$('fitBtn').onclick=()=>{const u=parseUpload(code.value); if(!u||!u.vb){toast('找不到 SVG 的原始尺寸，請先加上 viewBox');return}
+  code.value=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="${u.vb.x} ${u.vb.y} ${u.vb.w} ${u.vb.h}">${u.inner}</svg>`; render(); save(); toast('寬高已改成 {w} 和 {h}')};
+$('pColor').oninput=e=>{S.color=e.target.value.toUpperCase();colorNote();regen();render()};
+$('pStroke').oninput=e=>{S.stroke=+e.target.value;$('oStroke').textContent=S.stroke;regen();render()};
+$('pTrack').oninput=e=>{S.track=+e.target.value;$('oTrack').textContent=S.track;regen();render()};
+$('useText').onclick=()=>{S.color='currentColor';$('pColor').value=S.rfg;colorNote();regen();render()};
+function colorNote(){$('useText').textContent=S.color==='currentColor'?'✓ 跟著閱讀頁文字色':'改成跟著閱讀頁文字色'; $('useText').setAttribute('aria-pressed',S.color==='currentColor')}
+function setMode(m){S.mode=m; S.rbg=MODES[m].rbg; S.rfg=MODES[m].rfg; $('rbg').value=S.rbg; $('rfg').value=S.rfg;
+  $('mDay').setAttribute('aria-pressed',m==='day'); $('mNight').setAttribute('aria-pressed',m==='night'); render(); save()}
+$('mDay').onclick=()=>setMode('day'); $('mNight').onclick=()=>setMode('night');
+$('rbg').oninput=e=>{S.rbg=e.target.value;render();save()}; $('rfg').oninput=e=>{S.rfg=e.target.value;render();save()};
+$('fs').oninput=e=>{S.fs=+e.target.value;render();save()};
+$('em').oninput=e=>{S.em=+e.target.value;$('oEm').textContent=S.em;regen();render();save()};
+function setFit(f){S.fit=f; $('fitMeet').setAttribute('aria-pressed',f==='meet'); $('fitStretch').setAttribute('aria-pressed',f==='stretch'); render(); save()}
+$('fitMeet').onclick=()=>setFit('meet'); $('fitStretch').onclick=()=>setFit('stretch');
+$('frame').onchange=e=>ovl.classList.toggle('framed',e.target.checked);
+$('sChap').oninput=e=>{S.chap=+e.target.value;render()}; $('sBook').oninput=e=>{S.book=+e.target.value;render()};
+$('sBat').oninput=e=>{S.bat=+e.target.value;render()}; $('sTime').oninput=e=>{if(e.target.value){S.time=e.target.value;render()}};
+let nowTimer=null;
+$('now').onchange=e=>{clearInterval(nowTimer); if(e.target.checked){const tick=()=>{const d=new Date(); S.time=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); $('sTime').value=S.time; render()}; tick(); nowTimer=setInterval(tick,15000)}};
+let raf=null;
+$('play').onclick=()=>{
+  if(raf){cancelAnimationFrame(raf);raf=null;$('play').textContent='播放進度';return}
+  $('play').textContent='停止'; const t0=performance.now();
+  const step=t=>{const p=((t-t0)/4000)%1; S.chap=Math.round(p*100); S.book=Math.round(p*100); S.bat=100-Math.round(p*100);
+    const mins=Math.round(p*720); S.time=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
+    $('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTime').value=S.time; render(); raf=requestAnimationFrame(step)};
+  raf=requestAnimationFrame(step);
+};
+function copy(){
+  if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); }
+  const txt=code.value; const fallback=()=>{code.focus();code.select();toast('已選取 code，請按複製')};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast('已複製，貼進 Reeden 即可'),fallback); else fallback();
+}
+$('copy').onclick=copy; $('copy2').onclick=copy;
+let tt; function toast(m){const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),2000)}
+
+/* ---------- 初始化 ---------- */
+$('rBody').innerHTML=PARAS.map(p=>'<p>'+p+'</p>').join('');
+buildVars();
+$('pColor').value=S.color==='currentColor'?S.rfg:S.color; colorNote(); $('em').value=S.em; $('oEm').textContent=S.em; $('pStroke').value=S.stroke; $('oStroke').textContent=S.stroke; $('pTrack').value=S.track; $('oTrack').textContent=S.track;
+$('rbg').value=S.rbg; $('rfg').value=S.rfg; $('fs').value=S.fs;
+$('mDay').setAttribute('aria-pressed',S.mode==='day'); $('mNight').setAttribute('aria-pressed',S.mode==='night');
+$('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTime').value=S.time;
+S.fit=S.fit||'meet'; $('fitMeet').setAttribute('aria-pressed',S.fit==='meet'); $('fitStretch').setAttribute('aria-pressed',S.fit==='stretch');
+if(savedCode) code.value=savedCode; else regen();
+fit(); refresh();
+})();
+</script>
+
+</body>
+</html>
