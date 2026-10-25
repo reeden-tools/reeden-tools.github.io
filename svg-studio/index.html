@@ -255,7 +255,7 @@ const KEY='reeden-svg-studio-v7';
 const S={tpl:'bar', src:'chapterPct', txt:'cn', style:'builtin', role:'', fxs:['fill'], mdir:'lr', cnt:10, sdir:'lr', dir:'up', rot:'cw', fade:'in', fc:'orig', fcolor:'#2B2A27', color:'#2B2A27', em:12, fit:'meet', stroke:2, track:0.18, mode:'day', rbg:'#EFEEEA', rfg:'#2B2A27', fs:20,
   chap:61, book:15, bat:50, time:'04:31', box:{x:28,y:752,w:337,h:14}};
 const MODES={day:{rbg:'#EFEEEA',rfg:'#2B2A27'},night:{rbg:'#1B1B1A',rfg:'#B9B5AC'}};
-let upRaw=null, upName='', upRaw2=null, upName2='', slotTarget=1;
+let upRaw=null, upName='', upRaw2=null, upName2='', slotTarget=1, stagesRaw=[];
 
 /* ---------- 中文數字 ---------- */
 function cn(n,formal){
@@ -317,7 +317,8 @@ function substitute(code){
 /* ---------- 第 1 步：種類 ---------- */
 const PCT=[['chapterPct','章節進度'],['bookPct','全書進度'],['batteryPct','電量']];
 const TXT=[['cn','第幾章（中文）','第{chapterCn}章'],['chapter','章節名','{chapter}'],['time','時間','{time}'],['book','書名','{book}'],['pct','章節進度 %','{percent}']];
-const FX=[['fill','填滿'],['reveal','出現'],['move','移動'],['rotate','旋轉'],['fade','淡入淡出'],['steps','逐個亮起']];
+const FX=[['fill','填滿'],['reveal','出現'],['draw','描線'],['move','移動'],['rotate','旋轉'],['fade','淡入淡出'],['steps','逐個亮起']];
+const STAGE_SRC=[['chapterPct','章節進度'],['bookPct','全書進度'],['batteryPct','電量'],['day','一天中的時間']];
 const CNT=[[5,'5 個'],[8,'8 個'],[10,'10 個'],[12,'12 個']];
 const DIR=[['down','由上而下'],['up','由下而上'],['lr','由左往右'],['rl','由右往左']];
 const MDIR=[['lr','由左往右'],['rl','由右往左'],['down','由上往下'],['up','由下往上']];
@@ -366,6 +367,7 @@ const SHAPES={
   <line x1="{= w * 0.84}" y1="{= h/2}" x2="{w}" y2="{= h/2}" stroke="${p.color}" stroke-opacity="${Math.max(p.track,0.25)}" stroke-width="${r2(p.stroke/2)}"/>
   <text x="{= w/2}" y="{= h/2 + em * 0.28}" text-anchor="middle" font-size="{= em * 0.8}" letter-spacing="2" fill="${p.color}">${t}</text>
 </svg>`}},
+  stages:{name:'階段換圖',q:'要跟著什麼換圖？',src:'chapterPct',box:{x:313,y:14,w:64,h:64},gen:p=>genStages(p)},
   dots:{name:'逐個亮起',q:'它要跟著什麼亮起？',src:'chapterPct',box:{x:28,y:748,w:337,h:18},gen:p=>genSteps(p,null)},
   upload:{name:'自由發揮',q:'希望它怎麼變化？'}
 };
@@ -376,10 +378,12 @@ const GLYPH={
   clock:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 12V6.5M12 12l3.5 2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
   battery:'<svg viewBox="0 0 30 16"><rect x="1" y="2" width="24" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="26" y="6" width="2.5" height="4" rx="1" fill="currentColor"/><rect x="3.5" y="4.5" width="10" height="7" rx="1.5" fill="currentColor"/></svg>',
   text:'<svg viewBox="0 0 70 20"><line x1="0" y1="10" x2="12" y2="10" stroke="currentColor" opacity=".4"/><line x1="58" y1="10" x2="70" y2="10" stroke="currentColor" opacity=".4"/><text x="35" y="14.5" text-anchor="middle" font-size="12" font-family="serif" fill="currentColor">第十二章</text></svg>',
+  stages:'<svg viewBox="0 0 60 20"><circle cx="9" cy="10" r="6" fill="currentColor" opacity=".25"/><path d="M17 10h6M20 7l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M27 4h12v12H27z" fill="currentColor" opacity=".55"/><path d="M43 10h6M46 7l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M59 16H51l4-12z" fill="currentColor"/></svg>',
   dots:'<svg viewBox="0 0 60 20"><g fill="currentColor"><circle cx="6" cy="10" r="4"/><circle cx="18" cy="10" r="4"/><circle cx="30" cy="10" r="4"/></g><g fill="currentColor" opacity=".22"><circle cx="42" cy="10" r="4"/><circle cx="54" cy="10" r="4"/></g></svg>',
   upload:'<svg viewBox="0 0 24 24"><path d="M12 16V5M7.5 9.5 12 5l4.5 4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 };
 const FXICON={
+  draw:'<svg viewBox="0 0 16 16"><path d="M2 12C4 4 7 4 8 8s4 4 6-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="14 40"/><path d="M2 12C4 4 7 4 8 8s4 4 6-4" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".25"/></svg>',
   steps:'<svg viewBox="0 0 16 16"><circle cx="3" cy="8" r="2" fill="currentColor"/><circle cx="8" cy="8" r="2" fill="currentColor"/><circle cx="13" cy="8" r="2" fill="currentColor" opacity=".3"/></svg>',
   none:'<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
   fill:'<svg viewBox="0 0 16 16"><path d="M8 1.5C5.5 5 3.5 7.5 3.5 10a4.5 4.5 0 0 0 9 0C12.5 7.5 10.5 5 8 1.5Z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M3.6 9.5h8.8a4.5 4.5 0 0 1-8.8 0Z" fill="currentColor"/></svg>',
@@ -453,6 +457,49 @@ function clipRect(vb,P,dir){
     rl:`x="{= ${r2(vb.x+W)} - ${W} * ${P} / 100}" y="${vb.y}" width="${aW}" height="${H}"`}[dir]||'';
 }
 function moveKind(){return S.src!=='none'&&S.fxs.includes('move')?(['lr','rl'].includes(S.mdir)?'h':'v'):'n'}
+/* Reeden 的透明度規則：外層群組是負數、裡面有大於 1 的值時不會藏起來。
+   所以「何時出現／何時消失」一律寫在同一個圖形元素上：opacity 管出現，fill-opacity、stroke-opacity 管消失。 */
+const LEAF=/<(path|circle|rect|ellipse|polygon|polyline|line|text|use)\b([^>]*?)(\/?)>/gi;
+function pushLeaf(inner,attrs){
+  const keys=Object.keys(attrs).filter(k=>attrs[k]!=null); if(!keys.length) return inner;
+  return inner.replace(LEAF,(m,tag,rest,sl)=>{
+    keys.forEach(k=>{ rest=rest.replace(new RegExp('\\s'+k+'\\s*=\\s*["\'][^"\']*["\']','gi'),'');
+      rest=rest.replace(/(style\s*=\s*["'])([^"']*)/i,(mm,a,b)=>a+b.replace(new RegExp('(^|;)\\s*'+k+'\\s*:[^;]*','gi'),'')) });
+    return `<${tag}${rest}${keys.map(k=>` ${k}="${attrs[k]}"`).join('')}${sl}>`;
+  });
+}
+const DEMO_STAGES=[
+  {vb:{x:0,y:0,w:40,h:40},inner:'<circle cx="20" cy="20" r="16" fill="#E0457B"/>'},
+  {vb:{x:0,y:0,w:40,h:40},inner:'<path d="M 5 5 H 35 V 35 H 5 Z" fill="#3A7BD5"/>'},
+  {vb:{x:0,y:0,w:40,h:40},inner:'<path d="M 20 3 L 37 36 H 3 Z" fill="#2E8B57"/>'}];
+function stageP(src){return src==='day'?'((hour * 60 + minute) / 14.4)':src}
+function genStages(p){
+  const arts=stagesRaw.filter(Boolean).map(x=>parseUpload(x.raw)).filter(Boolean);
+  const list=arts.length?arts:DEMO_STAGES, n=list.length, P=stageP(p.src); let out='';
+  list.forEach((u,k)=>{
+    const vb=u.vb||{x:0,y:0,w:100,h:100}, AR=Math.round(vb.w/vb.h*10000)/10000;
+    const T1=r2(k*100/n), T2=r2((k+1)*100/n);
+    const on=k===0?null:`{= (${P} - ${T1}) * 1000 + 1}`, off=k===n-1?null:`{= (${T2} - ${P}) * 1000}`;
+    const inner=pushLeaf(u.inner,{opacity:on,'fill-opacity':off,'stroke-opacity':off});
+    out+=`\n  <g transform="translate({= w/2 - h * ${AR} / 2} 0) scale({= h / ${vb.h}}) translate(${-vb.x} ${-vb.y})">${inner}</g>`;
+  });
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 {w} {h}">${out}\n</svg>`;
+}
+/* 描線：有線條（stroke）的圖直接依進度畫線；只有填色的圖改成外框線再畫 */
+function hasStroke(inner){return /stroke\s*[=:]\s*["']?\s*(?!none)[#\w(]/i.test(inner.replace(/stroke-(width|opacity|linecap|linejoin|dasharray|dashoffset|miterlimit)/gi,''))}
+function drawLeaves(inner,P,vb){
+  const dash={pathLength:'100','stroke-dasharray':`{${P}} 100`,'stroke-dashoffset':'0'};
+  const noText=t=>t.replace(LEAF,(m,tag)=>tag.toLowerCase()==='text'?m.replace(/<text/i,'<text data-skip="1"'):m);
+  if(hasStroke(inner)) return pushLeaf(inner,dash).replace(/(<text\b[^>]*?) pathLength="100" stroke-dasharray="[^"]*" stroke-dashoffset="0"/gi,'$1');
+  const sw=Math.round(Math.max(vb.w,vb.h)*0.02*100)/100;
+  return inner.replace(LEAF,(m,tag,rest,sl)=>{
+    if(tag.toLowerCase()==='text') return m;
+    const f=(rest.match(/\sfill\s*=\s*["']([^"']*)["']/i)||[])[1];
+    const col=f&&f!=='none'?f:'currentColor';
+    rest=rest.replace(/\s(fill|stroke|stroke-width|pathLength|stroke-dasharray|stroke-dashoffset)\s*=\s*["'][^"']*["']/gi,'');
+    return `<${tag}${rest} fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" pathLength="100" stroke-dasharray="{${P}} 100"${sl}>`;
+  });
+}
 /* 逐個亮起：每一格的透明度 = (進度 - 門檻) × 1000 + 1，超出 0～1 的值會被裁成 0 或 1，等於「到了就亮」 */
 function genSteps(p,art,upload){
   const N=S.cnt||10, P=p.src, d=S.sdir||'lr', vert=d==='up'||d==='down', c=p.color, t=upload?0.2:p.track;
@@ -485,7 +532,9 @@ function genUpload(){
   if(S.fxs.includes('steps')) return genSteps({src:P},artInfo(),true);
   const has=f=>S.fxs.includes(f), cx=r2(vb.x+vb.w/2), cy=r2(vb.y+vb.h/2);
   let defs='', layer=inner;
-  if(has('fill')){
+  if(has('draw')){
+    layer=`<g opacity="0.15">${inner}</g>\n  ${drawLeaves(inner,P,vb)}`;
+  } else if(has('fill')){
     const top=S.fc==='custom'?`<g fill="${S.fcolor}">${recolor(inner,S.fcolor)}</g>`:inner;
     defs=`<clipPath id="reeden-fill"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
     layer=`<g opacity="0.2">${inner}</g>\n  <g clip-path="url(#reeden-fill)">${top}</g>`;
@@ -651,7 +700,7 @@ function uploadBox(slot){
 function fileRow(slot){
   slot=slot||1;
   const fr=document.createElement('div'); fr.className='filerow';
-  const nm=document.createElement('b'); nm.textContent='已載入：'+((slot===2?upName2:upName)||'你的 SVG');
+  const nm=document.createElement('b'); nm.textContent='已載入：'+((typeof slot==='string'?(stagesRaw[+slot.slice(1)]||{}).name:slot===2?upName2:upName)||'你的 SVG');
   const ch=document.createElement('button'); ch.type='button'; ch.className='btn small'; ch.textContent='換一個檔案'; ch.onclick=()=>{slotTarget=slot; $('file').click()};
   fr.appendChild(nm); fr.appendChild(ch);
   const wrap=document.createElement('div'); wrap.className='col'; wrap.style.gap='6px'; wrap.appendChild(fr);
@@ -663,6 +712,19 @@ function fileRow(slot){
 function buildStyleRow(){
   const w=$('styleRow'); w.innerHTML='';
   if(S.tpl==='upload') return;
+  if(S.tpl==='stages'){
+    const head=t=>{const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.style.fontWeight='500'; h.textContent=t; return h};
+    w.appendChild(sub('上傳 2～5 張圖，依順序輪流出現。還沒上傳時，預覽先用圓形、方形、三角形示範。'));
+    const cnt=Math.min(5,Math.max(2,stagesRaw.length+(stagesRaw.length<5?1:0)));
+    for(let i=0;i<cnt;i++){
+      const g=document.createElement('div'); g.className='col'; g.style.gap='6px';
+      g.appendChild(head('第 '+(i+1)+' 張'));
+      g.appendChild(stagesRaw[i]?fileRow('s'+i):uploadBox('s'+i));
+      if(stagesRaw[i]){ const rm=document.createElement('button'); rm.type='button'; rm.className='btn small'; rm.style.alignSelf='flex-start'; rm.textContent='移除這張'; rm.onclick=()=>{stagesRaw.splice(i,1); regen(); refresh()}; g.appendChild(rm); }
+      w.appendChild(g);
+    }
+    return;
+  }
   w.appendChild(sub('樣式'));
   w.appendChild(optRow([['builtin','用內建樣式'],['mine','用我自己的 SVG']],S.style,v=>{S.style=v; S.box=v==='mine'&&upRaw?boxForMine(S.tpl):Object.assign({},SHAPES[S.tpl].box); regen(); refresh()}));
   if(S.style!=='mine') return;
@@ -686,6 +748,7 @@ function buildStyleRow(){
 /* ---------- 產生 code ---------- */
 function regen(){
   if(S.tpl==='upload'){ if(upRaw) code.value=genUpload(); }
+  else if(S.tpl==='stages'){ code.value=genStages({src:S.src}); }
   else { const p={color:S.color,stroke:S.stroke,track:S.track,src:S.src,txt:S.txt};
     code.value=(S.style==='mine'&&upRaw)?genMine(S.tpl,p):SHAPES[S.tpl].gen(p); }
   save();
@@ -716,6 +779,13 @@ function optRow(list,cur,onPick,icons){
 function sub(t){const p=document.createElement('p'); p.className='sub'; p.textContent=t; return p}
 function buildStep2(){
   const w=$('step2'); w.innerHTML=''; const sh=SHAPES[S.tpl]; $('q2t').textContent=sh.q;
+  if(S.tpl==='stages'){
+    w.appendChild(optRow(STAGE_SRC,S.src,v=>{S.src=v;regen();refresh()}));
+    const n=Math.max(1,stagesRaw.filter(Boolean).length||3);
+    const rng=[...Array(n)].map((_,k)=>S.src==='day'?`第 ${k+1} 張：${r2(k*24/n)}～${r2((k+1)*24/n)} 點`:`第 ${k+1} 張：${r2(k*100/n)}～${r2((k+1)*100/n)}%`).join('、');
+    w.appendChild(sub('圖片會平均分配：'+rng+'。'+(S.src==='day'?'例如放 4 張，就是凌晨、早上、下午、晚上各一張。':'')));
+    return;
+  }
   if(S.tpl==='clock'){ w.appendChild(sub('時針和分針會自動跟著目前時間轉動，不用另外設定。到右邊「模擬數值」改時間就能看效果。')); return }
   if(S.tpl==='text'){ w.appendChild(optRow(TXT.map(x=>[x[0],x[1]]),S.txt,v=>{S.txt=v;regen();refresh()})); w.appendChild(sub('文字會跟著閱讀狀態自動更新。')); return }
   if(S.tpl==='upload'){
@@ -729,9 +799,9 @@ function buildStep2(){
       w.appendChild(optRow(FX,S.fxs,keep(v=>{
         if(S.fxs.includes(v)){ if(S.fxs.length>1) S.fxs=S.fxs.filter(x=>x!==v); else toast('至少要留一種變化'); }
         else if(v==='steps'){ S.fxs=['steps']; S.box=boxForUpload(); }
-        else { S.fxs=S.fxs.filter(x=>x!=='steps'&&!((v==='fill'&&x==='reveal')||(v==='reveal'&&x==='fill'))).concat(v); }
+        else { const ex={fill:['reveal','draw'],reveal:['fill','draw'],draw:['fill','reveal']}[v]||[]; S.fxs=S.fxs.filter(x=>x!=='steps'&&!ex.includes(x)).concat(v); }
       }),FXICON));
-      if(S.fxs.includes('fill')||S.fxs.includes('reveal')) w.appendChild(sub('「填滿」和「出現」只能二選一，其他都可以疊加。'));
+      if(S.fxs.some(x=>['fill','reveal','draw'].includes(x))) w.appendChild(sub('「填滿」、「出現」、「描線」三選一，其他都可以疊加。'));
       if(S.fxs.includes('steps')) w.appendChild(sub('「逐個亮起」會把你的圖案排成一排，不能和其他變化疊加。'));
       const block=(title,row,note)=>{const g=document.createElement('div'); g.className='col'; g.style.gap='8px'; g.style.borderLeft='1px solid var(--line)'; g.style.paddingLeft='12px';
         const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.textContent=title; g.appendChild(h); g.appendChild(row); if(note) g.appendChild(note); w.appendChild(g); return g};
@@ -753,6 +823,7 @@ function buildStep2(){
         if(f==='move') block('移動：往哪個方向？',optRow(MDIR,S.mdir,keep(v=>S.mdir=v),DIRICON),sub(moveKind()==='h'?'框會變成一條橫向跑道，可以拉長或拉高框調整。':'框會變成一條直向跑道，可以拉長或拉寬框調整。'));
         if(f==='rotate') block('旋轉：往哪個方向轉？',optRow(ROT,S.rot,keep(v=>S.rot=v),ROTICON));
         if(f==='fade') block('淡入淡出：哪一種？',optRow(FADE,S.fade,keep(v=>S.fade=v)));
+        if(f==='draw'){ const a=artInfo(); block('描線',sub(a&&hasStroke(a.u.inner)?'你的圖是線稿，會照原本的線條一筆一筆畫出來，底下留一層淡淡的原圖。':'你的圖只有填色、沒有線條，會先轉成外框線再畫出來，底下留一層淡淡的原圖。線稿效果最好。')); }
         if(f==='steps'){ const g=block('逐個亮起：要幾個？',optRow(CNT,S.cnt,keep(v=>S.cnt=v)));
           const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.textContent='從哪邊開始亮？'; g.appendChild(h);
           g.appendChild(optRow(MDIR,S.sdir,keep(v=>{S.sdir=v; S.box=boxForUpload();}),DIRICON));
@@ -773,7 +844,7 @@ function buildStep2(){
 function refresh(){
   tplWrap.querySelectorAll('.tpl').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===S.tpl));
   buildStyleRow(); buildStep2();
-  $('step3').hidden=S.tpl==='upload';
+  $('step3').hidden=S.tpl==='upload'||S.tpl==='stages';
   syncBox(); render();
 }
 
@@ -783,6 +854,7 @@ function loadSvg(txt,name,slot){
   txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[\s\S]*?>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
   const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
   const before=txt; txt=normalizeSvg(txt); const fixed=before!==txt;
+  if(typeof slot==='string'&&slot[0]==='s'){ const i=+slot.slice(1); stagesRaw[i]={raw:txt,name:name||''}; stagesRaw=stagesRaw.filter(Boolean); regen(); refresh(); toast('第 '+(Math.min(i,stagesRaw.length-1)+1)+' 張已載入'); return }
   if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100); return }
   upRaw=txt; upName=name||'';
   if(S.tpl!=='upload'){ S.style='mine'; S.box=boxForMine(S.tpl); }
@@ -791,7 +863,7 @@ function loadSvg(txt,name,slot){
   if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100);
   toast(u.vb?(S.tpl==='upload'?'已載入，接著選它要怎麼變化':'已載入，已套用成你的樣式'):'已載入，但檔案沒有 viewBox，比例可能不準');
 }
-function autoSlot(){return (S.tpl!=='upload'&&S.style==='mine'&&roleOf(S.tpl).startsWith('both')&&upRaw&&!upRaw2)?2:1}
+function autoSlot(){if(S.tpl==='stages') return 's'+Math.min(4,stagesRaw.length); return (S.tpl!=='upload'&&S.style==='mine'&&roleOf(S.tpl).startsWith('both')&&upRaw&&!upRaw2)?2:1}
 function readFile(f){
   if(!f) return;
   if(!/svg/i.test(f.type)&&!/\.svg$/i.test(f.name)){toast('請選擇 .svg 檔');return}
@@ -801,12 +873,12 @@ function readFile(f){
 $('file').onchange=e=>{readFile(e.target.files[0]); e.target.value=''};
 document.addEventListener('paste',e=>{
   const tg=e.target; if(tg&&(tg.tagName==='TEXTAREA'||tg.tagName==='INPUT')) return;
-  if(!(S.tpl==='upload'||S.style==='mine')) return;
+  if(!(S.tpl==='upload'||S.tpl==='stages'||S.style==='mine')) return;
   const txt=(e.clipboardData||window.clipboardData).getData('text'); if(/<svg\b/i.test(txt)&&/<\/svg>/i.test(txt)){ e.preventDefault(); loadSvg(txt,'貼上的 SVG',autoSlot()) }
 });
 window.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault(); const d=$('drop'); if(d) d.classList.add('over')}});
 window.addEventListener('dragleave',e=>{if(!e.relatedTarget){const d=$('drop'); if(d) d.classList.remove('over')}});
-window.addEventListener('drop',e=>{if(e.dataTransfer.files.length){e.preventDefault(); const dz=e.target.closest&&e.target.closest('.drop'); slotTarget=dz&&dz.dataset.slot?+dz.dataset.slot:autoSlot(); readFile(e.dataTransfer.files[0])}});
+window.addEventListener('drop',e=>{if(e.dataTransfer.files.length){e.preventDefault(); const dz=e.target.closest&&e.target.closest('.drop'); slotTarget=dz&&dz.dataset.slot?(/^s/.test(dz.dataset.slot)?dz.dataset.slot:+dz.dataset.slot):autoSlot(); readFile(e.dataTransfer.files[0])}});
 
 /* ---------- 變數（進階） ---------- */
 const GROUPS_SIMPLE=[
@@ -889,9 +961,9 @@ function render(){
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
 
 /* ---------- 儲存 ---------- */
-function save(){try{localStorage.setItem(KEY,JSON.stringify({S,code:code.value,upRaw,upName,upRaw2,upName2}))}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({S,code:code.value,upRaw,upName,upRaw2,upName2,stagesRaw}))}catch(e){}}
 let savedCode=null;
-try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''}}catch(e){}
+try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''; stagesRaw=Array.isArray(d.stagesRaw)?d.stagesRaw:[]}}catch(e){}
 if(!SHAPES[S.tpl]) S.tpl='bar';
 if(!Array.isArray(S.fxs)) S.fxs=[S.fx==='fillLR'?'fill':(S.fx||'fill')]; if(S.fx==='fillLR') S.dir='lr'; S.mdir=S.mdir||'lr'; if(!S.dir) S.dir='up'; S.style=S.style||'builtin'; S.rot=S.rot||'cw'; S.fade=S.fade||'in'; S.fc=S.fc||'orig'; S.fcolor=S.fcolor||'#2B2A27';
 
