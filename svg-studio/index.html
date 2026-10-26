@@ -423,7 +423,7 @@ function normalizeSvg(txt){
   return txt.replace(/(\s)(d|points|transform|viewBox)(\s*=\s*)(["'])([^"']*)\4/g,(m,sp,name,eq,q,val)=>{
     if(/[{}]/.test(val)) return m;
     let nv=val;
-    if(name==='d') nv=normPath(val);
+    if(name==='d'){ if(/\d*\.\d+\.\d|\d-[\d.]|(^|[^\d])\.\d/.test(val)||(/\d,\d/.test(val)&&!/\./.test(val)&&normPath(val,true)===null)) nv=normPath(val); }
     else if(name==='transform') nv=val.replace(/\(([^)]*)\)/g,(mm,inner)=>'('+normNums(inner)+')');
     else nv=normNums(val);
     return sp+name+eq+q+nv+q;
@@ -511,6 +511,7 @@ function genSteps(p,art,upload){
   const r4=v=>Math.round(v*10000)/10000;
   const top=(inner)=>upload&&S.fc==='custom'?`<g fill="${S.fcolor}">${recolor(inner,S.fcolor)}</g>`:inner;
   let ghost='', lit='';
+  const custom=upload&&S.fc==='custom';
   for(let i=0;i<N;i++){
     const pos=(d==='rl'||d==='up')?N-1-i:i, f=r4((pos+0.5)/N), T=r2((i+1)*100/N);
     const op=`{= (${P} - ${T}) * 1000 + 1}`;
@@ -522,12 +523,13 @@ function genSteps(p,art,upload){
       const vb=art.vb, AR=r4(vb.w/vb.h);
       const tr=vert?`translate({= w * 0.1} {= h * ${f} - w * 0.4 / ${AR}}) scale({= w * 0.8 / ${vb.w}}) translate(${-vb.x} ${-vb.y})`
                    :`translate({= w * ${f} - h * 0.4 * ${AR}} {= h * 0.1}) scale({= h * 0.8 / ${vb.h}}) translate(${-vb.x} ${-vb.y})`;
-      ghost+=`\n  <g opacity="${t}"><g transform="${tr}">${art.u.inner}</g></g>`;
-      lit+=`\n  <g opacity="${op}"><g transform="${tr}">${top(art.u.inner)}</g></g>`;
+      ghost+=`\n  <g opacity="${t}"><use href="#reeden-art" transform="${tr}"/></g>`;
+      lit+=`\n  <g opacity="${op}"><use href="#${custom?'reeden-art-c':'reeden-art'}" transform="${tr}"/></g>`;
     }
   }
   const attrs=art?art.u.attrs:'xmlns="http://www.w3.org/2000/svg"';
-  return `<svg ${attrs} width="{w}" height="{h}" viewBox="0 0 {w} {h}">${ghost}${lit}\n</svg>`;
+  const defs=art?`\n  <defs><g id="reeden-art">${art.u.inner}</g>${custom?`<g id="reeden-art-c">${top(art.u.inner)}</g>`:''}</defs>`:'';
+  return `<svg ${attrs} width="{w}" height="{h}" viewBox="0 0 {w} {h}">${defs}${ghost}${lit}\n</svg>`;
 }
 function genUpload(){
   const u=parseUpload(upRaw); if(!u) return upRaw;
@@ -541,8 +543,8 @@ function genUpload(){
     layer=`<g opacity="0.15">${inner}</g>\n  ${drawLeaves(inner,P,vb)}`;
   } else if(has('fill')){
     const top=S.fc==='custom'?`<g fill="${S.fcolor}">${recolor(inner,S.fcolor)}</g>`:inner;
-    defs=`<clipPath id="reeden-fill"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
-    layer=`<g opacity="0.2">${inner}</g>\n  <g clip-path="url(#reeden-fill)">${top}</g>`;
+    defs=`<g id="reeden-art">${inner}</g><clipPath id="reeden-fill"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
+    layer=`<use href="#reeden-art" opacity="0.2"/>\n  <g clip-path="url(#reeden-fill)">${S.fc==='custom'?top:'<use href="#reeden-art"/>'}</g>`;
   } else if(has('reveal')){
     defs=`<clipPath id="reeden-reveal"><rect ${clipRect(vb,P,S.dir)}/></clipPath>`;
     layer=`<g clip-path="url(#reeden-reveal)">${inner}</g>`;
@@ -756,7 +758,20 @@ function regen(){
   else if(S.tpl==='stages'){ code.value=genStages({src:S.src}); }
   else { const p={color:S.color,stroke:S.stroke,track:S.track,src:S.src,txt:S.txt};
     code.value=(S.style==='mine'&&upRaw)?genMine(S.tpl,p):SHAPES[S.tpl].gen(p); }
+  code.value=dedupeArt(code.value);
   save();
+}
+/* 同一個圖案在 code 裡出現好幾次時，只寫一次放進 <defs>，其他地方用 <use> 引用（Reeden 實測支援），code 可以少一半以上 */
+function dedupeArt(txt){
+  const arts=[]; [upRaw,upRaw2].concat(stagesRaw.map(x=>x&&x.raw)).forEach(r=>{ const u=r&&parseUpload(r); if(u&&u.inner.trim().length>200) arts.push(u.inner) });
+  let defs='';
+  arts.forEach((inner,i)=>{
+    if(txt.split(inner).length-1<2) return;
+    const id='reeden-art'+(i?i+1:'')+'-u';
+    txt=txt.split(inner).join('<use href="#'+id+'"/>'); defs+='<g id="'+id+'">'+inner+'</g>';
+  });
+  if(!defs) return txt;
+  return txt.replace(/^(\s*<svg\b[^>]*>)/,'$1\n  <defs>'+defs+'</defs>');
 }
 
 /* ---------- 第 1 步 UI ---------- */
@@ -854,7 +869,7 @@ function refresh(){
 }
 
 /* ---------- 精簡太大的 SVG ---------- */
-const BIG=15000, LIMIT=58*1024; // Reeden 實測：58KB 可以、78KB 不行
+const BIG=15000, LIMIT=65535; // Reeden 實測：65535 位元組可以、65537 不行
 const bytesOf=t=>new TextEncoder().encode(t).length;
 function parsePathAbs(d){
   const n=d.length, counts={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7}; let i=0, cmd=null; const segs=[];
