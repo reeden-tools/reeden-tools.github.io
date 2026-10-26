@@ -947,7 +947,7 @@ function loadSvg(txt,name,slot,noAsk){
   slot=slot||1;
   txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[\s\S]*?>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
   const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
-  const before=txt; txt=normalizeSvg(txt); const fixed=before!==txt;
+  const fixed=gluedNums(txt); txt=normalizeSvg(txt);
   if(!noAsk&&txt.length>BIG) setTimeout(()=>offerShrink(txt,name,slot),fixed?2300:600);
   if(typeof slot==='string'&&slot[0]==='s'){ const i=+slot.slice(1); stagesRaw[i]={raw:txt,name:name||''}; stagesRaw=stagesRaw.filter(Boolean); regen(); refresh(); toast('第 '+(Math.min(i,stagesRaw.length-1)+1)+' 張已載入'); return }
   if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100); return }
