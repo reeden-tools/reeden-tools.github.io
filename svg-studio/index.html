@@ -108,9 +108,6 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;margin:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-</head>
-<body>
-
 <style>
 /* 步驟流程補充樣式 */
 ::selection{background:var(--accent);color:var(--accent-ink)}
@@ -397,7 +394,7 @@ const FXICON={
 /* ---------- 數字格式正規化（Reeden 讀不懂 1.8.8、1-2 這類黏在一起的寫法） ---------- */
 const NUMRE=/^[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/;
 const fnum=x=>{const v=parseFloat(x); return String(Math.round(v*1e6)/1e6)};
-function normPath(d){
+function normPath(d,ret){
   const n=d.length, counts={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7}; let i=0, cmd=null; const out=[];
   const skip=()=>{while(i<n&&/[\s,]/.test(d[i]))i++};
   const num=()=>{skip(); const m=NUMRE.exec(d.slice(i)); if(!m) throw 0; i+=m[0].length; return fnum(m[0])};
@@ -411,7 +408,10 @@ function normPath(d){
       out.push(vals.join(' '));
     }
     return out.join(' ');
-  }catch(e){ return d }
+  }catch(e){
+    // 小數點被寫成逗號（例如 2,89 = 2.89）：當成分隔符號會讓數字數量對不上
+    if(!ret && /\d,\d/.test(d) && !/\./.test(d)){ const alt=normPath(d.replace(/(\d),(\d)/g,'$1.$2'),true); if(alt) return alt }
+    return ret?null:d }
 }
 function normNums(v){const m=v.match(/[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g); return m?m.map(fnum).join(' '):v}
 function normalizeSvg(txt){
@@ -427,7 +427,7 @@ function normalizeSvg(txt){
 function gluedNums(txt){
   let bad=false;
   txt.replace(/\s(d|points|transform|viewBox)\s*=\s*(["'])([^"']*)\2/g,(m,name,q,val)=>{
-    if(!/[{}]/.test(val)&&/\d*\.\d+\.\d|\d-[\d.]|(^|[^\d])\.\d/.test(val)) bad=true; return m});
+    if(!/[{}]/.test(val)&&(/\d*\.\d+\.\d|\d-[\d.]|(^|[^\d])\.\d/.test(val)||(name==='d'&&/\d,\d/.test(val)&&!/\./.test(val)&&normPath(val,true)===null))) bad=true; return m});
   return bad;
 }
 
@@ -855,12 +855,12 @@ function loadSvg(txt,name,slot){
   const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
   const before=txt; txt=normalizeSvg(txt); const fixed=before!==txt;
   if(typeof slot==='string'&&slot[0]==='s'){ const i=+slot.slice(1); stagesRaw[i]={raw:txt,name:name||''}; stagesRaw=stagesRaw.filter(Boolean); regen(); refresh(); toast('第 '+(Math.min(i,stagesRaw.length-1)+1)+' 張已載入'); return }
-  if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100); return }
+  if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100); return }
   upRaw=txt; upName=name||'';
   if(S.tpl!=='upload'){ S.style='mine'; S.box=boxForMine(S.tpl); }
   else { S.src='none'; S.box=boxForUpload(); }
   regen(); refresh();
-  if(fixed) setTimeout(()=>toast('已把黏在一起的數字（像 1.8.8）拆開，Reeden 才讀得懂'),2100);
+  if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100);
   toast(u.vb?(S.tpl==='upload'?'已載入，接著選它要怎麼變化':'已載入，已套用成你的樣式'):'已載入，但檔案沒有 viewBox，比例可能不準');
 }
 function autoSlot(){if(S.tpl==='stages') return 's'+Math.min(4,stagesRaw.length); return (S.tpl!=='upload'&&S.style==='mine'&&roleOf(S.tpl).startsWith('both')&&upRaw&&!upRaw2)?2:1}
@@ -951,12 +951,12 @@ function render(){
   errs.forEach(e=>msgs.push(['err',e]));
   if(unknown.length) msgs.push(['err','不認得的變數：'+unknown.map(u=>'{'+u+'}').join(' ')]);
   const glued=gluedNums(code.value);
-  if(glued) msgs.push(['err','有數字黏在一起（例如 1.8.8 或 1-2），Reeden 會整張不畫']);
+  if(glued) msgs.push(['err','數字寫法 Reeden 讀不懂（例如 1.8.8、1-2，或用逗號當小數點的 2,89），會整張不畫']);
   if(!msgs.some(m=>m[0]==='err')) msgs.unshift(['ok','✓ 可以正常顯示']);
   if(nested) img.removeAttribute('src');
   else if(!pe&&svg) img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(doc));
-  $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動拆開</button></span>':'');
-  const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已拆開黏在一起的數字')};
+  $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動修正</button></span>':'');
+  const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已修好數字寫法')};
 }
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
 
@@ -1039,6 +1039,5 @@ if(savedCode) code.value=savedCode; else regen();
 fit(); refresh();
 })();
 </script>
-
 </body>
 </html>
