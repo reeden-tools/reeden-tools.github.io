@@ -77,14 +77,14 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .stage{width:100%}
 .stageInner{position:relative;margin:0 auto}
 .phone{position:absolute;top:0;left:0;transform-origin:top left;width:417px;height:876px;border-radius:44px;background:#0E0E0D;padding:12px}
-.screen{position:relative;width:393px;height:852px;border-radius:33px;overflow:hidden;background:var(--rbg);color:var(--rfg);transition:background .25s,color .25s;touch-action:none}
+.screen{position:relative;width:393px;height:852px;border-radius:33px;overflow:hidden;background:var(--rbg);color:var(--rfg);transition:background .25s,color .25s}
 .island{position:absolute;top:11px;left:50%;width:125px;height:37px;margin-left:-62.5px;border-radius:19px;background:#000;z-index:10;pointer-events:none}
 .rhead{position:absolute;top:64px;left:0;right:0;text-align:center;font-size:11px;opacity:.6;font-family:var(--f-body);letter-spacing:.06em}
 .rbody{position:absolute;top:92px;left:24px;right:24px;bottom:66px;overflow:hidden;font-family:"Kaiti TC","STKaiti","BiauKai","Noto Serif TC",serif;text-align:justify}
 .rbody p{margin:0;text-indent:2em}
 .rfoot{position:absolute;bottom:36px;left:22px;right:22px;display:flex;justify-content:space-between;font-size:11px;opacity:.6;font-variant-numeric:tabular-nums;gap:8px}
 .rfoot span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ovl{position:absolute;z-index:5;cursor:move}
+.ovl{position:absolute;z-index:5;cursor:move;touch-action:none}
 .ovl img{display:block;width:100%;height:100%;pointer-events:none;user-select:none}
 .ovl.framed{outline:1.5px dashed #D2691E;outline-offset:0}
 .ovl .h{position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;border:2.5px solid #D2691E;display:none}
@@ -107,6 +107,29 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--surface);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;margin:0}
+
+/* 手指操作：框的可觸控範圍加大、圓點移到框外，細細的進度條也拖得動 */
+@media (pointer:coarse){
+  .ovl::before{content:"";position:absolute;left:-6px;right:-6px;top:-18px;bottom:-18px}
+  .ovl .h{width:22px;height:22px}
+  .ovl .h.br{right:-30px;bottom:-30px}
+  .ovl .h.r{right:-30px;margin-top:-11px}
+  .ovl .h.b{bottom:-30px;margin-left:-11px}
+}
+.mini,.mOnly,#mCopy{display:none}
+@media (max-width:900px){
+  .grid{display:flex;flex-direction:column;align-items:stretch}
+  .grid>.col{display:contents}
+  .o1{order:1}.o2{order:2}.o3{order:3}#mCopy{order:4;display:flex}.o5{order:5}.o6{order:6}.o7{order:7}
+  .mOnly{display:inline-flex}
+  .advanced.collapsed>:not(h2){display:none}
+  .mini{display:block;position:sticky;top:0;z-index:30;background:var(--bg);padding:8px 0 6px;margin-top:-8px;transition:opacity .2s}
+  .mini.away{opacity:0;pointer-events:none}
+  .miniBtn{appearance:none;display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--rbg,#F7F6F3);cursor:pointer;position:relative;font:inherit;color:inherit}
+  .miniView{position:relative;height:128px;overflow:hidden;pointer-events:none}
+  .miniView>.screen{position:absolute;top:0;left:0;transform-origin:0 0;border-radius:0;transition:none}
+  .miniTag{position:absolute;right:8px;bottom:6px;font-size:11px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -157,21 +180,22 @@ textarea#code{min-height:220px}
     <p class="lede">三步做出閱讀頁的 SVG 疊加層，並即時模擬在 Reeden 裡的樣子，完成後複製 code 貼進 App。</p>
   </header>
 
+  <div class="mini" id="mini"><button type="button" class="miniBtn" id="miniBtn" aria-label="看完整的模擬閱讀頁"><div class="miniView" id="miniView" aria-hidden="true"></div><span class="miniTag">完整預覽 ↓</span></button></div>
   <div class="grid">
     <div class="col">
-      <section class="panel step" aria-labelledby="q1">
+      <section class="panel step o1" aria-labelledby="q1">
         <h2 class="q" id="q1"><span class="n">1</span>你想要什麼樣的 SVG？</h2>
         <div class="tpls" id="tpls"></div>
         <div id="styleRow" class="col" style="gap:10px"></div>
         <input type="file" id="file" accept=".svg,image/svg+xml" hidden>
       </section>
 
-      <section class="panel step" aria-labelledby="q2">
+      <section class="panel step o2" aria-labelledby="q2">
         <h2 class="q" id="q2"><span class="n">2</span><span id="q2t">希望它怎麼變化？</span></h2>
         <div id="step2" class="col" style="gap:14px"></div>
       </section>
 
-      <section class="panel step" aria-labelledby="q3" id="step3">
+      <section class="panel step o3" aria-labelledby="q3" id="step3">
         <h2 class="q" id="q3"><span class="n">3</span>調整外觀</h2>
         <div class="params" id="params">
           <div class="field"><label for="pColor">顏色</label><input type="color" id="pColor" value="#2B2A27"><button class="btn small" id="useText" type="button">跟著閱讀頁文字色</button></div>
@@ -180,11 +204,12 @@ textarea#code{min-height:220px}
         </div>
       </section>
 
-      <section class="panel advanced" aria-labelledby="t-code">
-        <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
+      <section class="panel" id="mCopy" aria-labelledby="t-mcopy"><h2 id="t-mcopy">完成後：複製到 Reeden</h2></section>
+      <section class="panel advanced o7 collapsed" id="codePanel" aria-labelledby="t-code">
+        <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small mOnly" id="codeToggle" type="button" aria-expanded="false">展開</button><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
         <p class="hint">上面三步會自動產生 code。想自己微調可以直接改，但再動到上面的選項時，手動修改會被覆蓋。</p>
         <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
-        <div class="copyrow">
+        <div class="copyrow" id="mainCopy">
           <div class="status" id="status" aria-live="polite"></div>
           <span style="display:flex;gap:8px"><button class="btn" id="dl" type="button">下載 .txt</button><button class="btn primary" id="copy" type="button">複製 code</button></span>
         </div>
@@ -198,7 +223,7 @@ textarea#code{min-height:220px}
     </div>
 
     <div class="col previewCol">
-      <section class="panel" aria-labelledby="t-sim">
+      <section class="panel o6" aria-labelledby="t-sim">
         <h2 id="t-sim">模擬數值<button class="btn small" id="play" type="button">播放進度</button></h2>
         <div class="simrows">
           <div class="simrow"><label for="sChap">章節進度</label><input type="range" id="sChap" min="0" max="100" value="61"><output id="oChap"></output></div>
@@ -215,7 +240,7 @@ textarea#code{min-height:220px}
         <p class="note">模擬僅供預覽，最終以 Reeden 實際顯示為準。文字類變數的顯示格式為示意，算式目前只模擬加減乘除與括號。</p>
       </section>
 
-      <section class="panel" aria-labelledby="t-prev">
+      <section class="panel o5" aria-labelledby="t-prev">
         <h2 id="t-prev">模擬閱讀頁
           <span class="seg" role="group" aria-label="日夜模式"><button type="button" id="mDay" aria-pressed="true">日間</button><button type="button" id="mNight" aria-pressed="false">夜間</button></span>
         </h2>
@@ -1075,6 +1100,7 @@ function render(){
   $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動修正</button></span>':'')+(tooBig&&upRaw?'<span><button class="btn small" type="button" id="shrinkBtn">精簡</button></span>':'');
   const sb=$('shrinkBtn'); if(sb) sb.onclick=()=>doShrink(upRaw,upName,1,1);
   const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已修好數字寫法')};
+  updateMini();
 }
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
 
@@ -1084,6 +1110,35 @@ let savedCode=null;
 try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''; stagesRaw=Array.isArray(d.stagesRaw)?d.stagesRaw:[]}}catch(e){}
 if(!SHAPES[S.tpl]) S.tpl='bar';
 if(!Array.isArray(S.fxs)) S.fxs=[S.fx==='fillLR'?'fill':(S.fx||'fill')]; if(S.fx==='fillLR') S.dir='lr'; S.mdir=S.mdir||'lr'; if(!S.dir) S.dir='up'; S.style=S.style||'builtin'; S.rot=S.rot||'cw'; S.fade=S.fade||'in'; S.fc=S.fc||'orig'; S.fcolor=S.fcolor||'#2B2A27';
+
+
+/* ---------- 手機版：頂部小預覽、把複製區搬到步驟後面、code 預設收起 ---------- */
+const mq=matchMedia('(max-width:900px)');
+function placeCopy(){
+  const home=$('codePanel'), dest=$('mCopy'), row=$('mainCopy'), hint=$('boxHint');
+  if(mq.matches){ dest.appendChild(row); dest.appendChild(hint); }
+  else { const ta=$('code'); ta.after(row); row.after(hint); }
+}
+mq.addEventListener('change',()=>{placeCopy(); updateMini()}); placeCopy();
+$('codeToggle').onclick=()=>{const p=$('codePanel'), c=p.classList.toggle('collapsed'); $('codeToggle').textContent=c?'展開':'收起'; $('codeToggle').setAttribute('aria-expanded',String(!c))};
+$('miniBtn').onclick=()=>$('t-prev').closest('section').scrollIntoView({behavior:'smooth',block:'start'});
+let miniRaf=0;
+function updateMini(){
+  if(!mq.matches||miniRaf) return;
+  miniRaf=requestAnimationFrame(()=>{ miniRaf=0;
+    const view=$('miniView'), W=view.clientWidth, H=view.clientHeight; if(!W) return;
+    const c=$('screen').cloneNode(true); c.removeAttribute('id'); c.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+    const o=c.querySelector('.ovl'); if(o) o.classList.remove('framed');
+    const pad=28, y0=Math.max(0,S.box.y-pad), y1=Math.min(SH,S.box.y+S.box.h+pad), rh=Math.max(40,y1-y0);
+    const s=Math.min(W/SW,H/rh);
+    let tx=(W-SW*s)/2; if(SW*s>W) tx=Math.min(0,Math.max(W-SW*s,W/2-(S.box.x+S.box.w/2)*s));
+    const ty=-y0*s+(H-rh*s)/2;
+    c.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
+    view.replaceChildren(c);
+    $('miniBtn').style.background=S.rbg;
+  });
+}
+new IntersectionObserver(es=>es.forEach(e=>$('mini').classList.toggle('away',e.isIntersecting)),{threshold:0.35}).observe($('stage'));
 
 /* ---------- 手機縮放 ---------- */
 let scale=1;
