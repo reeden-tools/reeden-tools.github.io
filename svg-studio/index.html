@@ -52,6 +52,7 @@ h1 small{font-family:var(--f-mono);font-size:12px;color:var(--accent);margin-lef
 .field input[type=range]{width:110px;accent-color:var(--accent)}
 .field output{font-family:var(--f-mono);font-size:12px;color:var(--fg);min-width:3ch;font-variant-numeric:tabular-nums}
 input[type=color]{width:30px;height:26px;border:1px solid var(--line);border-radius:6px;padding:1px;background:var(--bg);cursor:pointer}
+#askDlg{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--fg);padding:20px;max-width:min(420px,calc(100vw - 32px));box-shadow:0 12px 40px rgba(0,0,0,.18)}#askDlg::backdrop{background:rgba(0,0,0,.35)}#askMsg{margin:0 0 16px;white-space:pre-line;line-height:1.65;font-size:14px}#askBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .btn{appearance:none;font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:7px;padding:6px 12px;cursor:pointer;white-space:nowrap}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:500}
@@ -246,6 +247,7 @@ textarea#code{min-height:220px}
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<dialog id="askDlg" aria-labelledby="askMsg"><p id="askMsg"></p><div id="askBtns"></div></dialog>
 
 <script>
 (function(){
@@ -851,12 +853,102 @@ function refresh(){
   syncBox(); render();
 }
 
+/* ---------- 精簡太大的 SVG ---------- */
+const BIG=15000;
+function parsePathAbs(d){
+  const n=d.length, counts={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7}; let i=0, cmd=null; const segs=[];
+  const skip=()=>{while(i<n&&/[\s,]/.test(d[i]))i++};
+  const num=()=>{skip(); const m=NUMRE.exec(d.slice(i)); if(!m) throw 0; i+=m[0].length; return parseFloat(m[0])};
+  const flag=()=>{skip(); const c=d[i]; if(c!=='0'&&c!=='1') throw 0; i++; return +c};
+  let cx=0, cy=0, sx=0, sy=0;
+  while(true){ skip(); if(i>=n) break;
+    if(/[MmZzLlHhVvCcSsQqTtAa]/.test(d[i])){ cmd=d[i++]; if(/[Zz]/.test(cmd)){ segs.push({c:'Z',v:[]}); cx=sx; cy=sy; continue } }
+    else if(!cmd||/[Zz]/.test(cmd)) throw 0;
+    const U=cmd.toUpperCase(), rel=cmd!==U, v=[];
+    for(let j=0;j<counts[U];j++) v.push(U==='A'&&(j===3||j===4)?flag():num());
+    let a;
+    if(U==='H'){ const x=rel?cx+v[0]:v[0]; a={c:'L',v:[x,cy]} }
+    else if(U==='V'){ const y=rel?cy+v[0]:v[0]; a={c:'L',v:[cx,y]} }
+    else if(U==='A'){ a={c:'A',v:[v[0],v[1],v[2],v[3],v[4],rel?cx+v[5]:v[5],rel?cy+v[6]:v[6]]} }
+    else { a={c:U,v:v.map((x,k)=>rel?x+(k%2?cy:cx):x)} }
+    segs.push(a);
+    const L=a.v.length; cx=a.v[L-2]; cy=a.v[L-1];
+    if(U==='M'){ sx=cx; sy=cy; if(cmd==='m') cmd='l'; else cmd='L'; }
+  }
+  return segs;
+}
+function writePath(segs,dec,minArea,minStep){
+  const f=x=>{const v=Math.round(x*Math.pow(10,dec))/Math.pow(10,dec); return String(v===0?0:v)};
+  const r=x=>Math.round(x*Math.pow(10,dec))/Math.pow(10,dec);
+  // 先切成子路徑，太小的丟掉
+  const subs=[]; let cur=null;
+  segs.forEach(s=>{ if(s.c==='M'){ cur=[s]; subs.push(cur) } else { if(!cur){cur=[{c:'M',v:[0,0]}]; subs.push(cur)} cur.push(s) } });
+  const out=[]; let px=0, py=0, last='';
+  subs.forEach(sp=>{
+    if(minArea>0){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+      sp.forEach(s=>{ for(let k=(s.c==='A'?5:0);k+1<s.v.length;k+=2){ const x=s.v[k],y=s.v[k+1]; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y } });
+      if((x1-x0)*(y1-y0)<minArea) return; }
+    let sx=0, sy=0;
+    sp.forEach(s=>{
+      if(s.c==='Z'){ out.push('z'); last='z'; px=sx; py=sy; return }
+      const V=s.v.map((x,k)=>s.c==='A'&&k<5?x:r(x));
+      if(s.c==='M'){ out.push('M'+f(V[0])+' '+f(V[1])); px=sx=V[0]; py=sy=V[1]; last='M'; return }
+      let rv;
+      if(s.c==='A') rv=[f(V[0]),f(V[1]),f(V[2]),V[3],V[4],f(V[5]-px),f(V[6]-py)];
+      else rv=V.map((x,k)=>f(x-(k%2?py:px)));
+      if(s.c==='L'&&minStep&&Math.abs(V[0]-px)+Math.abs(V[1]-py)<minStep&&sp[sp.indexOf(s)+1]&&sp[sp.indexOf(s)+1].c==='L') return;
+      if(s.c==='L'){ if(rv[0]==='0'&&rv[1]==='0') return; if(rv[1]==='0'){ rv=[rv[0]]; s={c:'H'} } else if(rv[0]==='0'){ rv=[rv[1]]; s={c:'V'} } }
+      const c=s.c.toLowerCase();
+      out.push((c===last?' ':c)+rv.join(' ')); last=c;
+      const L=V.length; px=V[L-2]; py=V[L-1];
+      if(s.c==='H'||s.c==='V'){ /* px,py already set from V */ }
+    });
+  });
+  return out.join('');
+}
+function shrinkSvg(txt,level){
+  const u=parseUpload(txt); const vb=u&&u.vb; const big=vb?Math.max(vb.w,vb.h):100;
+  const base=Math.ceil(Math.log10(1000/big)), dec=Math.max(0,base-(level>1?1:0)), minStep=level>1?big/500:0;
+  const minArea=Math.pow(big/(level>1?150:400),2);
+  let s=txt.replace(/<!--[\s\S]*?-->/g,'')
+    .replace(/<(metadata|title|desc|sodipodi:namedview)\b[\s\S]*?<\/\1>/g,'').replace(/<(sodipodi|inkscape):[^>]*\/>/g,'')
+    .replace(/\s(?:inkscape|sodipodi):[\w-]+="[^"]*"/g,'').replace(/\s(?:data-name|xml:space|version|enable-background|xmlns:(?:inkscape|sodipodi|serif))="[^"]*"/g,'');
+  // 沒被引用的 id
+  s=s.replace(/\sid="([^"]+)"/g,(m,id)=>s.split('#'+id).length>1?m:'');
+  s=s.replace(/(\s)d="([^"]*)"/g,(m,sp,d)=>{ if(/[{}]/.test(d)) return m; try{ return sp+'d="'+writePath(parsePathAbs(d),dec,minArea,minStep)+'"' }catch(e){ return m } });
+  const rd=Math.max(dec,0)+1;
+  s=s.replace(/(\s(?:x|y|x1|y1|x2|y2|cx|cy|r|rx|ry|width|height|stroke-width)=")([-\d.eE]+)"/g,(m,a,v)=>a+String(Math.round(parseFloat(v)*Math.pow(10,rd))/Math.pow(10,rd))+'"');
+  s=s.replace(/(\spoints=")([^"{}]*)"/g,(m,a,v)=>a+(v.match(/[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g)||[]).map(x=>String(Math.round(parseFloat(x)*Math.pow(10,dec))/Math.pow(10,dec))).join(' ')+'"');
+  s=s.replace(/>\s+</g,'><').replace(/[ \t]{2,}/g,' ').trim();
+  return s;
+}
+const kb=n=>(n/1024).toFixed(n<10240?1:0)+' KB';
+function askDlg(msg,btns){
+  const d=$('askDlg'); $('askMsg').textContent=msg; const row=$('askBtns'); row.innerHTML='';
+  btns.forEach(([label,fn,primary])=>{ const b=document.createElement('button'); b.type='button'; b.className='btn'+(primary?' primary':''); b.textContent=label; b.onclick=()=>{ d.close(); fn&&fn() }; row.appendChild(b) });
+  if(d.showModal) d.showModal(); else d.setAttribute('open','');
+}
+function offerShrink(orig,name,slot){
+  if(orig.length<=BIG) return;
+  askDlg('這個 SVG 有 '+kb(orig.length)+'，code 會很長，手機上不好複製，Reeden 讀起來也比較慢。要幫你精簡嗎？\n\n會把數字的小數位數減少、拿掉看不到的小碎塊和編輯軟體留下的資料，形狀幾乎不變。',[
+    ['保持原樣',null],['精簡',()=>doShrink(orig,name,slot,1),true]]);
+}
+function doShrink(orig,name,slot,level){
+  const s=shrinkSvg(orig,level);
+  if(s.length>=orig.length*0.95){ toast('這個檔案已經很精簡，沒辦法再變短了'); return }
+  loadSvg(s,name,slot,true);
+  const btns=[['還原',()=>{ loadSvg(orig,name,slot,true); toast('已還原成原本的') }],['好',null,true]];
+  if(level<2&&s.length>BIG) btns.splice(1,0,['再精簡一點',()=>{ loadSvg(orig,name,slot,true); doShrink(orig,name,slot,2) }]);
+  setTimeout(()=>askDlg('精簡好了：'+kb(orig.length)+' → '+kb(s.length)+'。\n\n看一下預覽，如果圖案有走樣可以按「還原」。'+(level>1?'（這次精簡得比較多，細節可能少一點。）':''),btns),50);
+}
+
 /* ---------- 上傳 ---------- */
-function loadSvg(txt,name,slot){
+function loadSvg(txt,name,slot,noAsk){
   slot=slot||1;
   txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[\s\S]*?>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
   const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
   const before=txt; txt=normalizeSvg(txt); const fixed=before!==txt;
+  if(!noAsk&&txt.length>BIG) setTimeout(()=>offerShrink(txt,name,slot),fixed?2300:600);
   if(typeof slot==='string'&&slot[0]==='s'){ const i=+slot.slice(1); stagesRaw[i]={raw:txt,name:name||''}; stagesRaw=stagesRaw.filter(Boolean); regen(); refresh(); toast('第 '+(Math.min(i,stagesRaw.length-1)+1)+' 張已載入'); return }
   if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100); return }
   upRaw=txt; upName=name||'';
