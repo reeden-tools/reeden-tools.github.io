@@ -854,7 +854,8 @@ function refresh(){
 }
 
 /* ---------- 精簡太大的 SVG ---------- */
-const BIG=15000;
+const BIG=15000, LIMIT=58*1024; // Reeden 實測：58KB 可以、78KB 不行
+const bytesOf=t=>new TextEncoder().encode(t).length;
 function parsePathAbs(d){
   const n=d.length, counts={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7}; let i=0, cmd=null; const segs=[];
   const skip=()=>{while(i<n&&/[\s,]/.test(d[i]))i++};
@@ -908,8 +909,8 @@ function writePath(segs,dec,minArea,minStep){
 }
 function shrinkSvg(txt,level){
   const u=parseUpload(txt); const vb=u&&u.vb; const big=vb?Math.max(vb.w,vb.h):100;
-  const base=Math.ceil(Math.log10(1000/big)), dec=Math.max(0,base-(level>1?1:0)), minStep=level>1?big/500:0;
-  const minArea=Math.pow(big/(level>1?150:400),2);
+  const base=Math.ceil(Math.log10(1000/big)), dec=Math.max(0,base-(level>1?1:0)), minStep=[0,0,big/500,big/200][level];
+  const minArea=Math.pow(big/[0,400,150,80][level],2);
   let s=txt.replace(/<!--[\s\S]*?-->/g,'')
     .replace(/<(metadata|title|desc|sodipodi:namedview)\b[\s\S]*?<\/\1>/g,'').replace(/<(sodipodi|inkscape):[^>]*\/>/g,'')
     .replace(/\s(?:inkscape|sodipodi):[\w-]+="[^"]*"/g,'').replace(/\s(?:data-name|xml:space|version|enable-background|xmlns:(?:inkscape|sodipodi|serif))="[^"]*"/g,'');
@@ -938,8 +939,12 @@ function doShrink(orig,name,slot,level){
   if(s.length>=orig.length*0.95){ toast('這個檔案已經很精簡，沒辦法再變短了'); return }
   loadSvg(s,name,slot,true);
   const btns=[['還原',()=>{ loadSvg(orig,name,slot,true); toast('已還原成原本的') }],['好',null,true]];
-  if(level<2&&s.length>BIG) btns.splice(1,0,['再精簡一點',()=>{ loadSvg(orig,name,slot,true); doShrink(orig,name,slot,2) }]);
-  setTimeout(()=>askDlg('精簡好了：'+kb(orig.length)+' → '+kb(s.length)+'。\n\n看一下預覽，如果圖案有走樣可以按「還原」。'+(level>1?'（這次精簡得比較多，細節可能少一點。）':''),btns),50);
+  if(level<3&&(s.length>BIG||bytesOf(code.value)>LIMIT)) btns.splice(1,0,['再精簡一點',()=>{ loadSvg(orig,name,slot,true); doShrink(orig,name,slot,level+1) }]);
+  setTimeout(()=>{ const out=bytesOf(code.value), over=out>LIMIT;
+    let msg='精簡好了：'+kb(orig.length)+' → '+kb(s.length)+'。';
+    if(over) msg+='\n\n加上效果後整段 code 是 '+kb(out)+'，還是超過 Reeden 的上限（約 '+kb(LIMIT)+'），貼進去不會顯示。'+(level<3?'可以按「再精簡一點」。':'建議換一個簡單一點的圖案，或減少逐個亮起的數量。');
+    else msg+='\n\n看一下預覽，如果圖案有走樣可以按「還原」。'+(level>1?'（這次精簡得比較多，細節可能少一點。）':'');
+    askDlg(msg,btns); },50);
 }
 
 /* ---------- 上傳 ---------- */
@@ -1046,11 +1051,14 @@ function render(){
   errs.forEach(e=>msgs.push(['err',e]));
   if(unknown.length) msgs.push(['err','不認得的變數：'+unknown.map(u=>'{'+u+'}').join(' ')]);
   const glued=gluedNums(code.value);
+  const sz=bytesOf(code.value), tooBig=sz>LIMIT;
+  if(tooBig) msgs.push(['err','code 有 '+kb(sz)+'，超過 Reeden 的上限（約 '+kb(LIMIT)+'），貼進去不會顯示'+(upRaw?'，可以按旁邊的按鈕':'，請減少數量或換簡單一點的圖案')]);
   if(glued) msgs.push(['err','數字寫法 Reeden 讀不懂（例如 1.8.8、1-2，或用逗號當小數點的 2,89），會整張不畫']);
   if(!msgs.some(m=>m[0]==='err')) msgs.unshift(['ok','✓ 可以正常顯示']);
   if(nested) img.removeAttribute('src');
   else if(!pe&&svg) img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(doc));
-  $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動修正</button></span>':'');
+  $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動修正</button></span>':'')+(tooBig&&upRaw?'<span><button class="btn small" type="button" id="shrinkBtn">精簡</button></span>':'');
+  const sb=$('shrinkBtn'); if(sb) sb.onclick=()=>doShrink(upRaw,upName,1,1);
   const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已修好數字寫法')};
 }
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
