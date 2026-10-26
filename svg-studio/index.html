@@ -116,19 +116,25 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
   .ovl .h.r{right:-30px;margin-top:-11px}
   .ovl .h.b{bottom:-30px;margin-left:-11px}
 }
-.mini,.mOnly,#mCopy{display:none}
+.mstage,.mOnly,#mCopy{display:none}
 @media (max-width:900px){
   .grid{display:flex;flex-direction:column;align-items:stretch}
   .grid>.col{display:contents}
   .o1{order:1}.o2{order:2}.o3{order:3}#mCopy{order:4;display:flex}.o5{order:5}.o6{order:6}.o7{order:7}
+  .grid .offTab{display:none!important}
+  .mstage{display:block;position:sticky;top:0;z-index:30;background:var(--bg);padding-top:8px}
+  .mview{position:relative;height:min(36svh,320px);border-radius:12px;overflow:hidden;background:var(--sunk)}
+  .mview .stage{width:100%;height:100%}
+  .mview .stageInner{overflow:hidden}
+  .mview .phone{transition:transform .2s}
+  .mview.dragging .phone{transition:none}
+  .mzoom{position:absolute;right:8px;top:8px;z-index:8}
+  .mtabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin-top:4px}
+  .mtabs::-webkit-scrollbar{display:none}
+  .mtabs button{flex:1 0 auto;appearance:none;background:none;border:0;font:inherit;font-size:14px;color:var(--muted);padding:11px 10px 10px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;cursor:pointer}
+  .mtabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent);font-weight:500}
+  .mnext{align-self:flex-end;margin-top:4px}
   .mOnly{display:inline-flex}
-  .advanced.collapsed>:not(h2){display:none}
-  .mini{display:block;position:sticky;top:0;z-index:30;background:var(--bg);padding:8px 0 6px;margin-top:-8px;transition:opacity .2s}
-  .mini.away{opacity:0;pointer-events:none}
-  .miniBtn{appearance:none;display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--rbg,#F7F6F3);cursor:pointer;position:relative;font:inherit;color:inherit}
-  .miniView{position:relative;height:128px;overflow:hidden;pointer-events:none}
-  .miniView>.screen{position:absolute;top:0;left:0;transform-origin:0 0;border-radius:0;transition:none}
-  .miniTag{position:absolute;right:8px;bottom:6px;font-size:11px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -180,7 +186,10 @@ textarea#code{min-height:220px}
     <p class="lede">三步做出閱讀頁的 SVG 疊加層，並即時模擬在 Reeden 裡的樣子，完成後複製 code 貼進 App。</p>
   </header>
 
-  <div class="mini" id="mini"><button type="button" class="miniBtn" id="miniBtn" aria-label="看完整的模擬閱讀頁"><div class="miniView" id="miniView" aria-hidden="true"></div><span class="miniTag">完整預覽 ↓</span></button></div>
+  <div class="mstage" id="mstage">
+    <div class="mview" id="mview"><button type="button" class="btn small mzoom" id="mzoom">看整頁</button></div>
+    <nav class="mtabs" id="mtabs" role="tablist" aria-label="步驟"></nav>
+  </div>
   <div class="grid">
     <div class="col">
       <section class="panel step o1" aria-labelledby="q1">
@@ -205,8 +214,8 @@ textarea#code{min-height:220px}
       </section>
 
       <section class="panel" id="mCopy" aria-labelledby="t-mcopy"><h2 id="t-mcopy">完成後：複製到 Reeden</h2></section>
-      <section class="panel advanced o7 collapsed" id="codePanel" aria-labelledby="t-code">
-        <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small mOnly" id="codeToggle" type="button" aria-expanded="false">展開</button><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
+      <section class="panel advanced o7" id="codePanel" aria-labelledby="t-code">
+        <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
         <p class="hint">上面三步會自動產生 code。想自己微調可以直接改，但再動到上面的選項時，手動修改會被覆蓋。</p>
         <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
         <div class="copyrow" id="mainCopy">
@@ -890,6 +899,7 @@ function refresh(){
   tplWrap.querySelectorAll('.tpl').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===S.tpl));
   buildStyleRow(); buildStep2();
   $('step3').hidden=S.tpl==='upload'||S.tpl==='stages';
+  if(typeof mq!=='undefined'&&mq.matches) showTab(curTab,false);
   syncBox(); render();
 }
 
@@ -1100,7 +1110,7 @@ function render(){
   $('status').innerHTML=msgs.map(m=>'<span class="'+m[0]+'">'+esc(m[1])+'</span>').join('')+(glued?'<span><button class="btn small" type="button" id="fixNums">自動修正</button></span>':'')+(tooBig&&upRaw?'<span><button class="btn small" type="button" id="shrinkBtn">精簡</button></span>':'');
   const sb=$('shrinkBtn'); if(sb) sb.onclick=()=>doShrink(upRaw,upName,1,1);
   const fb=$('fixNums'); if(fb) fb.onclick=()=>{code.value=normalizeSvg(code.value); if(S.tpl==='upload'||S.style==='mine'){upRaw=upRaw&&normalizeSvg(upRaw)} render(); save(); toast('已修好數字寫法')};
-  updateMini();
+  if(typeof mq!=='undefined'&&mq.matches&&!dragging) fit();
 }
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
 
@@ -1119,42 +1129,61 @@ function placeCopy(){
   if(mq.matches){ dest.appendChild(row); dest.appendChild(hint); }
   else { const ta=$('code'); ta.after(row); row.after(hint); }
 }
-mq.addEventListener('change',()=>{placeCopy(); updateMini()}); placeCopy();
-$('codeToggle').onclick=()=>{const p=$('codePanel'), c=p.classList.toggle('collapsed'); $('codeToggle').textContent=c?'展開':'收起'; $('codeToggle').setAttribute('aria-expanded',String(!c))};
-$('miniBtn').onclick=()=>$('t-prev').closest('section').scrollIntoView({behavior:'smooth',block:'start'});
-let miniRaf=0;
-function updateMini(){
-  if(!mq.matches||miniRaf) return;
-  miniRaf=requestAnimationFrame(()=>{ miniRaf=0;
-    const view=$('miniView'), W=view.clientWidth, H=view.clientHeight; if(!W) return;
-    const c=$('screen').cloneNode(true); c.removeAttribute('id'); c.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
-    const o=c.querySelector('.ovl'); if(o) o.classList.remove('framed');
-    const pad=28, y0=Math.max(0,S.box.y-pad), y1=Math.min(SH,S.box.y+S.box.h+pad), rh=Math.max(40,y1-y0);
-    const s=Math.min(W/SW,H/rh);
-    let tx=(W-SW*s)/2; if(SW*s>W) tx=Math.min(0,Math.max(W-SW*s,W/2-(S.box.x+S.box.w/2)*s));
-    const ty=-y0*s+(H-rh*s)/2;
-    c.style.transform='translate('+tx+'px,'+ty+'px) scale('+s+')';
-    view.replaceChildren(c);
-    $('miniBtn').style.background=S.rbg;
-  });
+
+/* 手機版：預覽固定在上面，下面用分頁一步一步選（參考晝夜展台） */
+const TABS=[['種類',['q1']],['變化',['q2']],['外觀',['step3']],['預覽與位置',['t-sim','t-prev']],['完成',['mCopy']],['Code',['codePanel']]];
+const secOf=id=>{const e=$(id); return e.tagName==='SECTION'?e:e.closest('section')};
+let curTab=0, zoom=true, dragging=false;
+function tabVisible(i){return !(TABS[i][1][0]==='step3'&&$('step3').hidden)}
+function buildTabs(){
+  const nav=$('mtabs'); nav.innerHTML='';
+  TABS.forEach(([name],i)=>{ if(!tabVisible(i)) return; const b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.textContent=name; b.setAttribute('aria-selected',String(i===curTab)); b.onclick=()=>showTab(i,true); nav.appendChild(b) });
 }
-new IntersectionObserver(es=>es.forEach(e=>$('mini').classList.toggle('away',e.isIntersecting)),{threshold:0.35}).observe($('stage'));
+function showTab(i,scroll){
+  if(!tabVisible(i)) i=i===2?3:1;
+  curTab=i;
+  TABS.forEach(([,ids],j)=>ids.forEach(id=>secOf(id).classList.toggle('offTab',j!==i)));
+  buildTabs();
+  if(scroll&&mq.matches){ const top=$('mstage').parentNode.getBoundingClientRect().top+scrollY+$('mstage').offsetTop-8; if(scrollY>top) scrollTo({top}); }
+}
+function nextTab(){ let i=curTab+1; while(i<TABS.length&&!tabVisible(i)) i++; if(i<TABS.length) showTab(i,true) }
+[['q1','下一步：怎麼變化 →'],['q2','下一步 →'],['step3','下一步：預覽與位置 →'],['t-sim','下一步：複製到 Reeden →']].forEach(([id,label])=>{
+  const b=document.createElement('button'); b.type='button'; b.className='btn mOnly mnext'; b.textContent=label; b.onclick=nextTab; secOf(id).appendChild(b);
+});
+$('mzoom').onclick=()=>{zoom=!zoom; $('mzoom').textContent=zoom?'看整頁':'放大'; fit()};
+function placeStage(){
+  const st=$('stage');
+  if(mq.matches){ if(st.parentNode!==$('mview')) $('mview').prepend(st); showTab(curTab,false); }
+  else { if(st.parentNode===$('mview')) $('dims').before(st); document.querySelectorAll('.offTab').forEach(e=>e.classList.remove('offTab')); }
+  fit();
+}
+mq.addEventListener('change',()=>{placeCopy(); placeStage()}); placeCopy();
+
 
 /* ---------- 手機縮放 ---------- */
 let scale=1;
-function fit(){const w=$('stage').clientWidth; scale=Math.min(1,w/417); $('phone').style.transform='scale('+scale+')'; $('stageInner').style.width=(417*scale)+'px'; $('stageInner').style.height=(876*scale)+'px'}
+function fit(){
+  if(typeof mq!=='undefined'&&mq.matches&&$('stage').parentNode===$('mview')){
+    const W=$('mview').clientWidth, H=$('mview').clientHeight; if(!W) return;
+    let tx,ty;
+    if(zoom){ scale=Math.min(1,(W-16)/417); tx=(W-417*scale)/2; const cy=(12+S.box.y+S.box.h/2)*scale; ty=Math.min(0,Math.max(H-876*scale,H/2-cy)); }
+    else { scale=H/876; tx=(W-417*scale)/2; ty=0; }
+    $('phone').style.transform='translate('+tx+'px,'+ty+'px) scale('+scale+')'; $('stageInner').style.width=W+'px'; $('stageInner').style.height=H+'px'; return;
+  }
+  const w=$('stage').clientWidth; scale=Math.min(1,w/417); $('phone').style.transform='scale('+scale+')'; $('stageInner').style.width=(417*scale)+'px'; $('stageInner').style.height=(876*scale)+'px'}
+placeStage();
 new ResizeObserver(fit).observe($('stage'));
 
 /* ---------- 拖曳 / 縮放 ---------- */
 ovl.addEventListener('pointerdown',e=>{
   const h=e.target.closest('.h'); const mode=h?(h.classList.contains('br')?'br':h.classList.contains('r')?'r':'b'):'move';
-  const sx=e.clientX, sy=e.clientY, b0=Object.assign({},S.box); ovl.setPointerCapture(e.pointerId); e.preventDefault();
+  const sx=e.clientX, sy=e.clientY, b0=Object.assign({},S.box); ovl.setPointerCapture(e.pointerId); e.preventDefault(); dragging=true; $('mview').classList.add('dragging');
   const mv=ev=>{const dx=(ev.clientX-sx)/scale, dy=(ev.clientY-sy)/scale;
     if(mode==='move'){S.box.x=Math.round(Math.min(SW-8,Math.max(8-b0.w,b0.x+dx))); S.box.y=Math.round(Math.min(SH-8,Math.max(8-b0.h,b0.y+dy)))}
     if(mode==='br'||mode==='r') S.box.w=Math.round(Math.max(4,b0.w+dx));
     if(mode==='br'||mode==='b') S.box.h=Math.round(Math.max(4,b0.h+dy));
     syncBox(); render();};
-  const up=()=>{ovl.removeEventListener('pointermove',mv);ovl.removeEventListener('pointerup',up);ovl.removeEventListener('pointercancel',up);save()};
+  const up=()=>{dragging=false; $('mview').classList.remove('dragging'); fit(); ovl.removeEventListener('pointermove',mv);ovl.removeEventListener('pointerup',up);ovl.removeEventListener('pointercancel',up);save()};
   ovl.addEventListener('pointermove',mv); ovl.addEventListener('pointerup',up); ovl.addEventListener('pointercancel',up);
 });
 ['bx','by','bw','bh'].forEach((id,i)=>$(id).addEventListener('input',e=>{const v=parseFloat(e.target.value); if(isNaN(v))return; const k=['x','y','w','h'][i], base=(k==='x'||k==='w')?SW:SH; S.box[k]=v/100*base; if(k==='w'||k==='h') S.box[k]=Math.max(4,S.box[k]); render(); save();}));
