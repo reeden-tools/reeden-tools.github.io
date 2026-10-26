@@ -185,7 +185,7 @@ textarea#code{min-height:220px}
         <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
         <div class="copyrow">
           <div class="status" id="status" aria-live="polite"></div>
-          <button class="btn primary" id="copy" type="button">複製 code</button>
+          <span style="display:flex;gap:8px"><button class="btn" id="dl" type="button">下載 .txt</button><button class="btn primary" id="copy" type="button">複製 code</button></span>
         </div>
         <p class="boxhint" id="boxHint"></p>
         <details class="vars" id="varsBox">
@@ -230,7 +230,7 @@ textarea#code{min-height:220px}
         <div class="dims" id="dims"></div>
         <div class="copyrow">
           <p class="hint" style="flex:1;min-width:0">拖曳框框移動位置，拉右下角圓點調整大小。</p>
-          <button class="btn primary" id="copy2" type="button">複製 code</button>
+          <span style="display:flex;gap:8px"><button class="btn" id="dl2" type="button">下載 .txt</button><button class="btn primary" id="copy2" type="button">複製 code</button></span>
         </div>
         <p class="boxhint" id="boxHint2"></p>
         <div class="params">
@@ -1028,6 +1028,15 @@ function copy(){
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast('已複製，貼進 Reeden 即可'),fallback); else fallback();
 }
 $('copy').onclick=copy; $('copy2').onclick=copy;
+function download(){
+  if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); }
+  try{
+    const url=URL.createObjectURL(new Blob([code.value],{type:'text/plain;charset=utf-8'}));
+    const a=document.createElement('a'); a.href=url; a.download='reeden-svg.txt'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000); toast('已下載 reeden-svg.txt');
+  }catch(e){ toast('這個瀏覽器不能下載，請改用複製') }
+}
+$('dl').onclick=download; $('dl2').onclick=download;
 let tt; function toast(m){const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),2000)}
 
 /* ---------- 初始化 ---------- */
@@ -1042,5 +1051,6 @@ if(savedCode) code.value=savedCode; else regen();
 fit(); refresh();
 })();
 </script>
+
 </body>
 </html>
