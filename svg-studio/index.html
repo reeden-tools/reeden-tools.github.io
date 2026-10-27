@@ -32,6 +32,9 @@ body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 header.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+header.top .home{flex:0 0 100%;margin:-10px 0 4px;font-size:12.5px;letter-spacing:.03em;color:var(--muted);text-decoration:none}
+header.top .home:hover{color:var(--accent)}
+header.top .home:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 h1{font-family:var(--f-display);font-size:26px;margin:0;letter-spacing:.02em;text-wrap:balance}
 h1 small{font-family:var(--f-mono);font-size:12px;color:var(--accent);margin-left:8px;letter-spacing:.08em;font-weight:500}
 .lede{color:var(--muted);margin:0;max-width:60ch}
@@ -232,6 +235,7 @@ textarea#code{min-height:220px}
 
 <div class="wrap">
   <header class="top">
+    <a class="home" href="../">← Reeden 小工具</a>
     <h1>Reeden SVG 工坊<small>PAGE OVERLAY</small></h1>
     <p class="lede">三步做出閱讀頁的 SVG 疊加層，並即時模擬在 Reeden 裡的樣子，完成後複製 code 貼進 App。</p>
   </header>
