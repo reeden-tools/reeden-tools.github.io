@@ -72,6 +72,27 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .cloud .link span{font-size:12px;color:var(--muted);white-space:nowrap}
 .cloud .link input{flex:1;min-width:0;font:inherit;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
 .cloud .warn{color:var(--danger)}
+.views{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:4px 0 14px}
+.views[hidden]{display:none}
+.views button{appearance:none;background:none;border:0;font:inherit;font-size:15px;color:var(--muted);padding:10px 12px 9px;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap}
+.views button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent);font-weight:500}
+body.mineView .mstage,body.mineView .grid{display:none!important}
+#mineView{display:none}
+body.mineView #mineView{display:flex}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.work{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.work.cur{border-color:var(--accent)}
+.mini{position:relative;flex:none;width:48px;aspect-ratio:393/852;border-radius:6px;border:1px solid var(--line);overflow:hidden;background:var(--rbg)}
+.mini::before{content:"";position:absolute;left:6.1%;right:6.1%;top:10.8%;bottom:7.7%;background:repeating-linear-gradient(to bottom,var(--rfg) 0 1px,transparent 1px 3px);opacity:.15}
+.mini img,.strip img{position:absolute;object-fit:contain}
+.strip{position:relative;height:110px;border-radius:8px;background:var(--rbg)}
+.strip img{inset:14px;width:calc(100% - 28px);height:calc(100% - 28px)}
+.noThumb{display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:var(--muted);padding:12px;height:110px;box-sizing:border-box;border:1px dashed var(--line);border-radius:8px}
+.work .meta{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.work .t{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
+.work .t b{font-weight:500;overflow-wrap:anywhere}
+.work .t span{font-size:12px;color:var(--muted)}
+.work .acts{display:flex;flex-wrap:wrap;gap:6px}
 @media (pointer:coarse){.cloud .link input{font-size:16px}}
 .vargroup{display:flex;flex-direction:column;gap:6px}
 .vargroup h3{font-size:12px;margin:0;font-weight:500;color:var(--fg)}
@@ -201,6 +222,12 @@ textarea#code{min-height:220px}
     <p class="lede">三步做出閱讀頁的 SVG 疊加層，並即時模擬在 Reeden 裡的樣子，完成後複製 code 貼進 App。</p>
   </header>
 
+  <nav class="views" id="views" role="tablist" aria-label="頁面" hidden><button type="button" role="tab" id="vMake" aria-selected="true">製作</button><button type="button" role="tab" id="vMine" aria-selected="false">我的作品</button></nav>
+  <section class="panel" id="mineView" aria-labelledby="t-mine">
+    <h2 id="t-mine">我的雲端作品</h2>
+    <p class="hint" id="mineNote"></p>
+    <div class="gallery" id="gallery"></div>
+  </section>
   <div class="mstage" id="mstage">
     <div class="mview" id="mview"><button type="button" class="btn small mzoom" id="mzoom">看整頁</button></div>
     <nav class="mtabs" id="mtabs" role="tablist" aria-label="步驟"></nav>
@@ -239,7 +266,7 @@ textarea#code{min-height:220px}
         </div>
         <p class="boxhint" id="boxHint"></p>
         <div class="cloud" id="cloudBox">
-          <h3>雲端儲存<span class="row"><button class="btn small" id="cloudRestore" type="button" hidden>還原打開前的作品</button></span></h3>
+          <h3>雲端儲存<span class="row"><button class="btn small" id="cloudRestore" type="button" hidden>還原打開前的作品</button><button class="btn small" id="cloudMineBtn" type="button" hidden>看我的作品</button></span></h3>
           <p class="hint" id="cloudNote">作品平常就存在這台裝置。存到雲端可以拿到分享連結，也能在別的裝置繼續改。</p>
           <div class="row"><button class="btn primary" id="cloudSave" type="button">存到雲端</button><button class="btn" id="cloudNew" type="button" hidden>另存成新的</button></div>
           <div id="cloudLinks" hidden>
@@ -1288,6 +1315,66 @@ function cloudFiles(){ // 上傳的原始 SVG 放進雲端檔案，其餘狀態�
   stagesRaw.forEach((x,i)=>{ if(x&&x.raw) f['stage'+i]=x.raw });
   return f;
 }
+// 這台裝置存過（或用編輯連結打開過）的雲端作品，最新的在前面
+const MINE_KEY=KEY+'-cloud-list';
+function mineList(){try{return JSON.parse(localStorage.getItem(MINE_KEY)||'[]')}catch(e){return []}}
+function setMine(l){try{localStorage.setItem(MINE_KEY,JSON.stringify(l))}catch(e){}}
+function rememberMine(r,name,thumb){
+  if(!r||!r.key) return;
+  const all=mineList(), old=all.find(x=>x.id===r.id), l=all.filter(x=>x.id!==r.id);
+  l.unshift({id:r.id,key:r.key,name:name||'',at:Date.now(),thumb:thumb===undefined?(old&&old.thumb)||null:thumb});
+  while(l.length>1&&JSON.stringify(l).length>2e6) l.pop(); // 縮圖不要把本機空間吃光
+  setMine(l);
+}
+const workName=()=>upName||(SHAPES[S.tpl]&&SHAPES[S.tpl].name)||'SVG 作品';
+// 縮圖：存到雲端時把預覽的 SVG 和框位置一起記下來
+function thumbNow(){const src=img.getAttribute('src'); return src&&src.length<300000?{src,box:{...S.box},rbg:S.rbg,rfg:S.rfg,fit:S.fit}:null}
+function miniPage(t){
+  const m=document.createElement('div'); m.className='mini'; m.style.setProperty('--rbg',t.rbg); m.style.setProperty('--rfg',t.rfg);
+  const i=document.createElement('img'); i.alt=''; i.src=t.src; const pc=(v,d)=>(v/d*100)+'%';
+  i.style.left=pc(t.box.x,SW); i.style.top=pc(t.box.y,SH); i.style.width=pc(t.box.w,SW); i.style.height=pc(t.box.h,SH); if(t.fit==='stretch') i.style.objectFit='fill';
+  m.appendChild(i); return m;
+}
+function strip(t){const d=document.createElement('div'); d.className='strip'; d.style.setProperty('--rbg',t.rbg); const i=document.createElement('img'); i.alt=''; i.src=t.src; d.appendChild(i); return d}
+let view='make';
+function setView(v){
+  view=v; document.body.classList.toggle('mineView',v==='mine');
+  $('vMake').setAttribute('aria-selected',String(v==='make')); $('vMine').setAttribute('aria-selected',String(v==='mine'));
+  if(v==='mine') renderMine(); else { fit(); }
+  scrollTo({top:0});
+}
+function renderMine(){
+  const l=mineList();
+  $('views').hidden=!cloudOk(); $('vMine').textContent='我的作品'+(l.length?' · '+l.length:'');
+  $('cloudMineBtn').hidden=!l.length;
+  if(view!=='mine') return;
+  $('mineNote').textContent=l.length?'這台裝置存過雲端的作品，點「打開」就能繼續改。在別的裝置用編輯連結打開過的，也會列在那台裝置上。':'還沒有存到雲端的作品。做好之後，在「完成」那一步按「存到雲端」，就會出現在這裡。';
+  const g=$('gallery'); g.innerHTML='';
+  const cur=cloudRec();
+  l.forEach(x=>{
+    const isCur=cur&&cur.id===x.id;
+    const card=document.createElement('div'); card.className='work'+(isCur?' cur':'');
+    if(x.thumb) card.append(strip(x.thumb));
+    else { const n=document.createElement('div'); n.className='noThumb'; n.textContent='打開一次就會有預覽圖'; card.appendChild(n); }
+    const t=document.createElement('div'); t.className='t';
+    const n=document.createElement('b'); n.textContent=x.name||'SVG 作品';
+    const d=new Date(x.at||0), when=document.createElement('span'); when.textContent=d.getFullYear()+'/'+(d.getMonth()+1)+'/'+d.getDate()+(isCur?'・目前這個':'');
+    t.append(n,when);
+    const meta=document.createElement('div'); meta.className='meta'; if(x.thumb){const mp=miniPage(x.thumb); mp.title='在閱讀頁上的位置'; meta.appendChild(mp)} meta.appendChild(t);
+    const row=document.createElement('div'); row.className='acts';
+    const b=(label,fn,cls)=>{const e=document.createElement('button'); e.type='button'; e.className='btn small'+(cls?' '+cls:''); e.textContent=label; e.onclick=fn; row.appendChild(e); return e};
+    const links=ReedenCloud.links(x.id,x.key);
+    if(isCur) b('繼續改',()=>setView('make'),'primary'); else b('打開',()=>openCloud({id:x.id,key:x.key}),'primary');
+    b('複製分享',()=>copyRaw(links.share,'已複製分享連結'));
+    b('複製編輯',()=>copyRaw(links.edit,'已複製編輯連結，請自己保存好'));
+    b('移除',()=>askDlg('只會從這台裝置的列表拿掉，雲端作品和連結仍然有效。',[['取消',null],['移除',()=>{setMine(mineList().filter(y=>y.id!==x.id)); renderMine()},true]]));
+    card.append(meta,row); g.appendChild(card);
+  });
+}
+function copyRaw(text,msg){
+  const fb=()=>{const i=document.createElement('input'); i.readOnly=true; i.value=text; i.style.cssText='position:fixed;left:0;top:0;opacity:0'; document.body.appendChild(i); i.select(); let ok=false; try{ok=document.execCommand('copy')}catch(e){} i.remove(); toast(ok?msg:'無法自動複製，請改用上面的連結欄')};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast(msg),fb); else fb();
+}
 function cloudData(){return {S,code:code.value,manual,upName,upName2,stageNames:stagesRaw.map(x=>x?x.name||'':'')}}
 function renderCloud(){
   const box=$('cloudBox'); if(!cloudOk()){ box.hidden=true; return }
@@ -1298,6 +1385,7 @@ function renderCloud(){
   if(r){ const l=ReedenCloud.links(r.id,r.key); $('cloudShare').value=l.share; $('cloudEditRow').hidden=$('cloudEditWarn').hidden=!l.edit; if(l.edit) $('cloudEdit').value=l.edit; }
   let hasBackup=false; try{hasBackup=!!localStorage.getItem(BACKUP_KEY)}catch(e){}
   $('cloudRestore').hidden=!hasBackup;
+  renderMine();
 }
 let cloudBusy=false;
 async function cloudSave(asNew){
@@ -1311,13 +1399,15 @@ async function cloudSave(asNew){
     const files=cloudFiles(), slots=Object.keys(files);
     for(const k of slots) await ReedenCloud.putFile(TOOL,r.id,r.key,k,files[k],k+'.svg');
     for(const k of (r.slots||[])) if(!files[k]) await ReedenCloud.deleteFile(TOOL,r.id,r.key,k).catch(()=>{});
-    r.slots=slots; setCloudRec(r); renderCloud();
+    r.slots=slots; setCloudRec(r); rememberMine(r,workName(),thumbNow()); renderCloud();
     toast(asNew||label==='存到雲端'?'已存到雲端，下面有分享連結':'已更新雲端');
   }catch(e){ toast(ReedenCloud.message(e)) }
   finally{ btn.disabled=false; btn.textContent=label; cloudBusy=false; renderCloud(); }
 }
 function copyText(id,msg){const el=$(id); const done=()=>toast(msg); const fb=()=>{el.focus();el.select();toast('已選取，請按複製')};
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(el.value).then(done,fb); else fb();}
+$('cloudMineBtn').onclick=()=>setView('mine');
+$('vMake').onclick=()=>setView('make'); $('vMine').onclick=()=>setView('mine');
 $('cloudSave').onclick=()=>cloudSave(false); $('cloudNew').onclick=()=>cloudSave(true);
 $('cloudShareCopy').onclick=()=>copyText('cloudShare','已複製分享連結');
 $('cloudEditCopy').onclick=()=>copyText('cloudEdit','已複製編輯連結，請自己保存好');
@@ -1338,6 +1428,7 @@ async function openCloud(link){
       const prev=localStorage.getItem(CLOUD_KEY); prev?localStorage.setItem(BACKUP_KEY+'-cloud',prev):localStorage.removeItem(BACKUP_KEY+'-cloud');
       localStorage.setItem(KEY,JSON.stringify(blob));
       setCloudRec(w.owner?{id:link.id,key:link.key,slots:Object.keys(raw)}:{id:link.id,key:null,slots:[]});
+      if(w.owner){ const old=mineList().find(x=>x.id===link.id); rememberMine({id:link.id,key:link.key},d.upName||(old&&old.name)||(SHAPES[d.S.tpl]&&SHAPES[d.S.tpl].name)||''); }
       sessionStorage.setItem(KEY+'-opened',w.owner?'edit':'view');
       location.reload();
     }catch(e){ toast(e&&e.code?ReedenCloud.message(e):'打開雲端作品失敗，你目前的作品沒有變動') }
@@ -1354,6 +1445,7 @@ $('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTim
 S.fit=S.fit||'meet'; $('fitMeet').setAttribute('aria-pressed',S.fit==='meet'); $('fitStretch').setAttribute('aria-pressed',S.fit==='stretch');
 if(savedCode){ code.value=savedCode; manual=savedManual; } else regen();
 fit(); refresh();
+{const r=cloudRec(); if(r&&r.key){const o=mineList().find(x=>x.id===r.id); if(!o) rememberMine(r,workName(),thumbNow()); else if(!o.thumb){o.thumb=thumbNow(); setMine(mineList().map(x=>x.id===o.id?o:x))}}}
 renderCloud();
 try{const o=sessionStorage.getItem(KEY+'-opened'); if(o){sessionStorage.removeItem(KEY+'-opened'); toast(o==='edit'?'已打開雲端作品，改完按「更新雲端」':'已打開分享的作品，存到雲端會變成你自己的一份')}}catch(e){}
 if(cloudOk()){const link=ReedenCloud.parseHash(); if(link) openCloud(link);}
