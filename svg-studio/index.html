@@ -243,15 +243,16 @@ textarea#code{min-height:220px}
     <div class="coll" id="handleBox">
       <div id="hMine" hidden>
         <p class="hint">你的代號：<b id="hName"></b>。別人輸入代號就能看你的作品集，也能套用成自己的一份，但改不到你的作品。</p>
-        <div class="row"><button class="btn small" id="hCopy" type="button">複製作品集頁連結</button><button class="btn small" id="hPwBtn" type="button">改密碼</button></div>
-        <form class="link" id="hPwForm" hidden><input id="hPw2" type="password" autocomplete="new-password" placeholder="新密碼（至少 6 個字）" aria-label="新密碼"><button class="btn small" type="submit">儲存</button></form>
+        <div class="row"><button class="btn small" id="hCopy" type="button">複製作品集頁連結</button><button class="btn small" id="hPwBtn" type="button">看密碼</button><button class="btn small" id="hPwNew" type="button">換新密碼</button></div>
+        <div id="hPwBox" hidden><div class="link"><span>密碼</span><input id="hPwShow" readonly aria-label="密碼"><button class="btn small" id="hPwCopy" type="button">複製</button></div>
+        <p class="hint">換裝置時，輸入代號和這組密碼就能拿回作品。請另外存好；這台裝置隨時能再按「看密碼」。</p></div>
       </div>
       <form id="hClaim" hidden>
-        <p class="hint">取一個代號：別人輸入代號就能看你的作品集；換裝置時輸入代號和密碼，就能拿回全部作品繼續改。忘記密碼就救不回來，請記好。</p>
-        <div class="link"><input id="hNew" autocomplete="username" placeholder="代號" aria-label="代號" maxlength="20"><input id="hNewPw" type="password" autocomplete="new-password" placeholder="密碼（至少 6 個字）" aria-label="密碼"><button class="btn small primary" type="submit">建立</button></div>
+        <p class="hint">取一個代號：別人輸入代號就能看你的作品集；密碼由系統產生，換裝置時輸入代號和密碼，就能拿回全部作品繼續改。</p>
+        <div class="link"><input id="hNew" autocomplete="username" placeholder="代號" aria-label="代號" maxlength="20"><button class="btn small primary" type="submit">建立</button></div>
       </form>
       <details id="hLoginBox"><summary class="hint">在別的裝置做過？用代號和密碼拿回作品</summary>
-        <form class="link" id="hLogin"><input id="hUser" autocomplete="username" placeholder="代號" aria-label="代號" maxlength="20"><input id="hPw" type="password" autocomplete="current-password" placeholder="密碼" aria-label="密碼"><button class="btn small" type="submit">登入</button></form>
+        <form class="link" id="hLogin"><input id="hUser" autocomplete="username" placeholder="代號" aria-label="代號" maxlength="20"><input id="hPw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" placeholder="密碼" aria-label="密碼"><button class="btn small" type="submit">登入</button></form>
       </details>
       <form class="link" id="hLook"><span>看別人的作品集</span><input id="hLookName" placeholder="代號" aria-label="要看的代號" maxlength="20"><button class="btn small" type="submit">查看</button></form>
     </div>
@@ -366,7 +367,7 @@ textarea#code{min-height:220px}
 <div class="undobar" id="undoBar" role="status"><span>已依新選項重新產生 code，你手改的部分被換掉了。</span><span class="btns"><button type="button" id="undoKeep">知道了</button><button type="button" class="main" id="undoBtn">復原手改的 code</button></span></div>
 <dialog id="askDlg" aria-labelledby="askMsg"><p id="askMsg"></p><div id="askBtns"></div></dialog>
 
-<script src="../shared/cloud.v1.js?v=2"></script>
+<script src="../shared/cloud.v1.js?v=3"></script>
 <script>
 (function(){
 const SW=393, SH=852;
@@ -1475,7 +1476,8 @@ $('vMake').onclick=()=>setView('make'); $('vMine').onclick=()=>{other=null; setV
 let other=null; // 正在看的別人的作品集 {handle, items}
 function renderHandle(){
   const H=ReedenCloud.handles, h=H.mine(), hasColl=!!ReedenCloud.collection.get();
-  $('hMine').hidden=!h; if(h) $('hName').textContent=h;
+  $('hMine').hidden=!h; if(h) $('hName').textContent=h; else $('hPwBox').hidden=true;
+  $('hPwBtn').hidden=!H.password();
   $('hClaim').hidden=!!h||!(hasColl||mineList().length);
   $('hLoginBox').hidden=!!h;
 }
@@ -1509,15 +1511,21 @@ async function lookHandle(name){
 }
 const busy=(form,on)=>form.querySelectorAll('button,input').forEach(x=>x.disabled=on);
 $('hClaim').onsubmit=async e=>{ e.preventDefault(); const f=$('hClaim'); busy(f,true);
-  try{ await syncMine(); const h=await ReedenCloud.handles.claim($('hNew').value.trim(),$('hNewPw').value); $('hNewPw').value=''; toast('代號「'+h+'」建立好了'); renderMine() }
+  try{ await syncMine(); const h=await ReedenCloud.handles.claim($('hNew').value.trim()); toast('代號「'+h+'」建立好了，請存好密碼'); renderMine(); showPw(true) }
   catch(err){ toast(ReedenCloud.message(err)) } finally{ busy(f,false) } };
 $('hLogin').onsubmit=async e=>{ e.preventDefault(); const f=$('hLogin'); busy(f,true);
   try{ const h=await ReedenCloud.handles.login($('hUser').value.trim(),$('hPw').value); $('hPw').value=''; await syncMine(); toast('已用「'+h+'」拿回作品集'); renderMine() }
   catch(err){ toast(err&&err.code==='not_found'?'找不到這個代號':ReedenCloud.message(err)) } finally{ busy(f,false) } };
 $('hLook').onsubmit=e=>{ e.preventDefault(); const n=$('hLookName').value.trim(); if(n) lookHandle(n) };
 $('hCopy').onclick=()=>copyRaw(ReedenCloud.handles.link(),'已複製作品集頁連結，可以直接分享');
-$('hPwBtn').onclick=()=>{ $('hPwForm').hidden=!$('hPwForm').hidden };
-$('hPwForm').onsubmit=async e=>{ e.preventDefault(); try{ await ReedenCloud.handles.setPassword($('hPw2').value); $('hPw2').value=''; $('hPwForm').hidden=true; toast('密碼改好了') }catch(err){ toast(ReedenCloud.message(err)) } };
+function showPw(on){ const p=ReedenCloud.handles.password(); $('hPwBox').hidden=!(on&&p); $('hPwShow').value=p||''; $('hPwBtn').textContent=on&&p?'收起密碼':'看密碼' }
+$('hPwBtn').onclick=()=>showPw($('hPwBox').hidden);
+$('hPwCopy').onclick=()=>copyText('hPwShow','已複製密碼，請存好');
+let pwSure=0;
+$('hPwNew').onclick=async()=>{ const b=$('hPwNew');
+  if(Date.now()-pwSure>4000){ pwSure=Date.now(); b.textContent='確定換？舊密碼會失效'; setTimeout(()=>{ if(Date.now()-pwSure>=4000) b.textContent='換新密碼' },4100); return }
+  pwSure=0; b.textContent='換新密碼'; b.disabled=true;
+  try{ await ReedenCloud.handles.setPassword(); renderHandle(); showPw(true); toast('換好新密碼了，請存好') }catch(err){ toast(ReedenCloud.message(err)) } finally{ b.disabled=false } };
 $('cloudSave').onclick=()=>cloudSave(false); $('cloudNew').onclick=()=>cloudSave(true);
 $('cloudShareCopy').onclick=()=>copyText('cloudShare','已複製分享連結');
 $('cloudEditCopy').onclick=()=>copyText('cloudEdit','已複製編輯連結，請自己保存好');

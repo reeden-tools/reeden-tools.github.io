@@ -125,24 +125,44 @@
   const HKEY = 'reeden-handle';
   const hGet = () => { try { return localStorage.getItem(HKEY) || null; } catch (e) { return null; } };
   const hSet = h => { try { h ? localStorage.setItem(HKEY, h) : localStorage.removeItem(HKEY); } catch (e) {} };
+  // 密碼由系統產生；這台記著，隨時能再看（這台本來就拿得到作品集鑰匙）
+  const PKEY = 'reeden-handle-pw';
+  const pGet = () => { try { return localStorage.getItem(PKEY) || null; } catch (e) { return null; } };
+  const pSet = p => { try { p ? localStorage.setItem(PKEY, p) : localStorage.removeItem(PKEY); } catch (e) {} };
+  const ABC = 'abcdefghjkmnpqrstuvwxyz23456789'; // 去掉 i l o 0 1，不怕看錯
+  function newPassword() {
+    const r = crypto.getRandomValues(new Uint32Array(10));
+    const s = Array.from(r, n => ABC[n % ABC.length]).join('');
+    return s.slice(0, 5) + '-' + s.slice(5);
+  }
+  // 系統密碼大小寫、空白、少打連字號都算對
+  const tidyPw = p => { const t = String(p || '').trim(), m = /^([a-z0-9]{5})\s*-?\s*([a-z0-9]{5})$/i.exec(t); return m ? (m[1] + '-' + m[2]).toLowerCase() : t; };
   const handles = {
     mine: hGet,
     // 幫這台的作品集取代號（作品集還沒建立時先建一個空的）
     async claim(handle, password) {
+      password = password || newPassword();
       let c = cGet();
       if (!c) { await sync('', []); c = cGet(); }
       if (!c) { const r = await request('POST', 'collection/works', { body: { data: { v: 1, items: [], removed: [] }, schema_version: 'collection-1' } }); c = { id: r.id, key: r.key }; cSet(c); }
       const r = await request('POST', 'handles', { key: c.key, body: { handle, password, collection_id: c.id } });
-      hSet(r.handle); return r.handle;
+      hSet(r.handle); pSet(password); return r.handle;
     },
+    password: pGet,
     view: handle => request('GET', 'handles/' + enc(handle)),
     // 在新裝置用代號和密碼拿回作品集；這台原本的作品會在下次同步時併進去
     async login(handle, password) {
+      password = tidyPw(password);
       const r = await request('POST', 'handles/' + enc(handle) + '/login', { body: { password } });
-      cSet({ id: r.collection_id, key: r.collection_key }); hSet(r.handle); return r.handle;
+      cSet({ id: r.collection_id, key: r.collection_key }); hSet(r.handle); pSet(password); return r.handle;
     },
-    setPassword(password) { const c = cGet(), h = hGet(); return request('PUT', 'handles/' + enc(h), { key: c && c.key, body: { password } }); },
-    forget() { hSet(null); },
+    // 換一組新的系統密碼，回傳新密碼
+    async setPassword(password) {
+      password = password || newPassword();
+      const c = cGet(), h = hGet(); await request('PUT', 'handles/' + enc(h), { key: c && c.key, body: { password } });
+      pSet(password); return password;
+    },
+    forget() { hSet(null); pSet(null); },
     // '#u=<代號>'
     parse(hash) { const m = /^#u=(.{1,80})$/.exec(hash == null ? location.hash : hash); if (!m) return null; try { return decodeURIComponent(m[1]); } catch (e) { return null; } },
     link: h => location.origin + location.pathname + '#u=' + enc(h || hGet() || ''),
