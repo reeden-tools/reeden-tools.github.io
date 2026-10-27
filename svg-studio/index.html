@@ -426,6 +426,8 @@ function evalExpr(src,env){
     if(t==='('){const v=add(); if(next()!==')') throw '缺少右括號'; return v}
     if(t==='-') return -prim(); if(t==='+') return prim();
     if(/^[\d.]/.test(t)) return parseFloat(t);
+    if(/^(min|max|abs)$/.test(t)&&peek()==='('){ next(); const a=[add()]; while(peek()===','){ next(); a.push(add()) } if(next()!==')') throw '缺少右括號';
+      return t==='abs'?Math.abs(a[0]):Math[t](...a) }
     if(/^[A-Za-z_]/.test(t)){ if(!(t in env)) throw '「'+t+'」不是數值變數'; return env[t]}
     throw '不支援的符號「'+t+'」';}
   function mul(){let v=prim(); while(['*','/','%'].includes(peek())){const o=next(), r=prim(); v=o==='*'?v*r:o==='/'?v/r:v%r} return v}
@@ -620,7 +622,8 @@ function genStages(p){
 /* 描線：有線條（stroke）的圖直接依進度畫線；只有填色的圖改成外框線再畫 */
 function hasStroke(inner){return /stroke\s*[=:]\s*["']?\s*(?!none)[#\w(]/i.test(inner.replace(/stroke-(width|opacity|linecap|linejoin|dasharray|dashoffset|miterlimit)/gi,''))}
 function drawLeaves(inner,P,vb){
-  const dash={pathLength:'100','stroke-dasharray':`{${P}} 100`,'stroke-dashoffset':'0'};
+  const pv=/^\w+$/.test(P)?`{${P}}`:`{= ${P}}`;
+  const dash={pathLength:'100','stroke-dasharray':`${pv} 100`,'stroke-dashoffset':'0'};
   const noText=t=>t.replace(LEAF,(m,tag)=>tag.toLowerCase()==='text'?m.replace(/<text/i,'<text data-skip="1"'):m);
   if(hasStroke(inner)) return pushLeaf(inner,dash).replace(/(<text\b[^>]*?) pathLength="100" stroke-dasharray="[^"]*" stroke-dashoffset="0"/gi,'$1');
   const sw=Math.round(Math.max(vb.w,vb.h)*0.02*100)/100;
@@ -629,7 +632,7 @@ function drawLeaves(inner,P,vb){
     const f=(rest.match(/\sfill\s*=\s*["']([^"']*)["']/i)||[])[1];
     const col=f&&f!=='none'?f:'currentColor';
     rest=rest.replace(/\s(fill|stroke|stroke-width|pathLength|stroke-dasharray|stroke-dashoffset)\s*=\s*["'][^"']*["']/gi,'');
-    return `<${tag}${rest} fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" pathLength="100" stroke-dasharray="{${P}} 100"${sl}>`;
+    return `<${tag}${rest} fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" pathLength="100" stroke-dasharray="${pv} 100"${sl}>`;
   });
 }
 /* 逐個亮起：每一格的透明度 = (進度 - 門檻) × 1000 + 1，超出 0～1 的值會被裁成 0 或 1，等於「到了就亮」 */
@@ -737,7 +740,10 @@ function genLayers(){
   let defs='', gs='';
   layerList().forEach((L,i)=>{
     const u=parseUpload(prepArt(L.raw,'l'+(i+1))); if(!u) return;
-    const vb=u.vb||{x:0,y:0,w:100,h:100}, P=L.src, on=P!=='none'&&L.fxs.length;
+    /* 接力：只在 a%～b% 之間動，用 min/max 夾住（Reeden 實測支援），範圍外停在頭或尾 */
+    const a=L.a||0, z=L.b==null?100:L.b, P=L.src==='none'||(a<=0&&z>=100)?L.src:`max(0, min(100, (${L.src} - ${a}) * ${r2(100/(z-a))}))`;
+    if(P!==L.src) L=Object.assign({},L,{src:P});
+    const vb=u.vb||{x:0,y:0,w:100,h:100}, on=P!=='none'&&L.fxs.length;
     const b=on?artBody(u.inner,vb,L,'-'+(i+1)):{defs:'',layer:u.inner}; defs+=b.defs;
     const mv=on&&L.fxs.includes('move'), hz=['lr','rl'].includes(L.mdir);
     /* 移動時圖最多佔跑道的 30%，才有路可以走 */
@@ -1062,11 +1068,28 @@ function buildStep2(){
   }
 }
 const MAXL=4; // 加上主圖案最多 5 張
+/* 起訖範圍：兩條滑桿，至少差 5% */
+function rangeRow(L,src){
+  const g=document.createElement('div'); g.className='col'; g.style.gap='4px';
+  const lab=document.createElement('p'); lab.className='sub'; const nm=(PCT.find(x=>x[0]===src)||[,'進度'])[1];
+  const a0=()=>L.a||0, b0=()=>L.b==null?100:L.b;
+  const txt=()=>{ lab.textContent=(a0()<=0&&b0()>=100)?'在整段'+nm+'裡都會動（可以縮小範圍做接力）':nm+' '+a0()+'%～'+b0()+'% 之間動，前後停住'; };
+  const mk=(k,aria)=>{ const r=document.createElement('input'); r.type='range'; r.min=0; r.max=100; r.step=5; r.value=k==='a'?a0():b0(); r.setAttribute('aria-label',aria); r.style.width='100%';
+    r.oninput=()=>{ let v=+r.value; if(k==='a'){ v=Math.min(v,b0()-5); L.a=v } else { v=Math.max(v,a0()+5); L.b=v } r.value=v; txt(); regen(); render() };
+    r.onchange=save; return r };
+  txt(); g.appendChild(lab);
+  const row=document.createElement('div'); row.style.cssText='display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center';
+  [['a','開始'],['b','結束']].forEach(([k,t])=>{ const s=document.createElement('span'); s.className='sub'; s.textContent=t; row.appendChild(s); row.appendChild(mk(k,t+'的進度')) });
+  g.appendChild(row); return g;
+}
 function layersUI(){
   const box=document.createElement('div'); box.className='col layers'; box.style.gap='12px';
   const h=document.createElement('p'); h.className='sub'; h.style.color='var(--fg)'; h.style.fontWeight='500'; h.textContent='再放幾張圖，各自變化'; box.appendChild(h);
   const Ls=Array.isArray(S.layers)?S.layers:[];
   if(!Ls.length) box.appendChild(sub('可以再加最多 '+MAXL+' 張自己的 SVG，每張有自己的位置和變化，例如山跟著進度填滿、月亮同時淡入。'));
+  else if(S.src!=='none'){ if(!S.l0) S.l0={x:0,y:0,w:1,h:1};
+    const g=document.createElement('div'); g.className='col'; g.style.cssText='gap:8px;border-left:1px solid var(--line);padding-left:12px';
+    const b=document.createElement('b'); b.textContent='第 1 張：'+(upName||'你的 SVG'); g.appendChild(b); g.appendChild(rangeRow(S.l0,S.src)); box.appendChild(g); }
   Ls.forEach((L,i)=>{
     const g=document.createElement('div'); g.className='col'; g.style.cssText='gap:8px;border-left:1px solid var(--line);padding-left:12px';
     const fr=document.createElement('div'); fr.className='filerow';
@@ -1086,6 +1109,7 @@ function layersUI(){
       if(L.fx==='move'){ g.appendChild(optRow(MDIR,L.mdir,set(v=>{L.mdir=v;track()}),DIRICON)); g.appendChild(sub('圖會在自己的虛線框裡從一頭走到另一頭，框拉長一點走得越遠。')); }
       if(L.fx==='rotate') g.appendChild(optRow(ROT,L.rot,set(v=>L.rot=v),ROTICON));
       if(L.fx==='fade') g.appendChild(optRow(FADE,L.fade,set(v=>L.fade=v)));
+      g.appendChild(rangeRow(L,L.src));
     }
     box.appendChild(g);
   });
