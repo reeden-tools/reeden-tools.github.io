@@ -64,6 +64,7 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .status{font-size:12px;font-family:var(--f-mono);display:flex;flex-direction:column;gap:2px}
 .status .ok{color:var(--ok)} .status .err{color:var(--danger)} .status .note2{color:var(--muted)}
 .boxhint{font-size:12.5px;margin:0;color:var(--fg);background:var(--sunk);border-radius:8px;padding:8px 10px}
+.boxhint .linkbtn{appearance:none;background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
 .boxhint b{color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums}
 .cloud{border-top:1px dashed var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
 .cloud h3{font-size:13px;margin:0;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -262,7 +263,7 @@ textarea#code{min-height:220px}
         <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
         <div class="copyrow" id="mainCopy">
           <div class="status" id="status" aria-live="polite"></div>
-          <span style="display:flex;gap:8px"><button class="btn" id="dl" type="button">下載 .txt</button><button class="btn primary" id="copy" type="button">複製 code</button></span>
+          <span style="display:flex;gap:8px"><button class="btn" id="dl" type="button">下載 .txt</button><button class="btn primary" id="copy" type="button">複製到 Reeden</button></span>
         </div>
         <p class="boxhint" id="boxHint"></p>
         <div class="cloud" id="cloudBox">
@@ -317,7 +318,7 @@ textarea#code{min-height:220px}
         <div class="dims" id="dims"></div>
         <div class="copyrow">
           <p class="hint" style="flex:1;min-width:0">拖曳框框移動位置，拉右下角圓點調整大小。</p>
-          <span style="display:flex;gap:8px"><button class="btn" id="dl2" type="button">下載 .txt</button><button class="btn primary" id="copy2" type="button">複製 code</button></span>
+          <span style="display:flex;gap:8px"><button class="btn" id="dl2" type="button">下載 .txt</button><button class="btn primary" id="copy2" type="button">複製到 Reeden</button></span>
         </div>
         <p class="boxhint" id="boxHint2"></p>
         <div class="params">
@@ -1139,7 +1140,7 @@ function render(){
 
 
   const pl=Math.round(S.box.x/SW*1000)/10, pt=Math.round(S.box.y/SH*1000)/10;
-  const bh='貼進 Reeden 後，新的疊加層會出現在畫面中間。先用手指把框<b>隨便拖離中間</b>，編輯畫面才會出現左邊距、上邊距；再打開編輯畫面，照這樣填：<b>寬度 '+pw+'%</b>、<b>左邊距 '+pl+'%</b>、<b>上邊距 '+pt+'%</b>、<b>高度 '+ph+'%</b>，縮放模式選<b>「'+(S.fit==='stretch'?'拉伸鋪滿':'保持比例')+'」</b>。';
+  const bh='按「複製到 Reeden」後，到 Reeden 的疊加層畫面按<b>剪貼簿按鈕</b>貼上，位置和大小會自動帶好。<br>想貼進 SVG 欄位的話，改按<button type="button" class="linkbtn" data-copysvg>只複製 SVG</button>。這種貼法新的疊加層會出現在畫面中間，要先把框<b>隨便拖離中間</b>，再照這樣填：<b>寬度 '+pw+'%</b>、<b>左邊距 '+pl+'%</b>、<b>上邊距 '+pt+'%</b>、<b>高度 '+ph+'%</b>，縮放模式選<b>「'+(S.fit==='stretch'?'拉伸鋪滿':'保持比例')+'」</b>。';
   $('boxHint').innerHTML=bh; $('boxHint2').innerHTML=bh;
   const msgs=[];
   if(S.tpl==='upload'&&!upRaw&&!code.value.trim()){ img.removeAttribute('src'); $('status').innerHTML='<span class="hint">還沒有上傳 SVG</span>'; return }
@@ -1287,12 +1288,23 @@ $('play').onclick=()=>{
     $('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTime').value=S.time; render(); raf=requestAnimationFrame(step)};
   raf=requestAnimationFrame(step);
 };
-function copy(){
-  if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); }
-  const txt=code.value; const fallback=()=>{code.focus();code.select();toast('已選取 code，請按複製')};
-  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>toast('已複製，貼進 Reeden 即可'),fallback); else fallback();
+/* Reeden 剪貼簿按鈕吃的格式（從 Reeden 複製出來的實例）：SVG 放在 template，框的位置、大小用 % */
+function reedenClip(){
+  const pc=(v,b)=>Math.round(v/b*10000)/100;
+  const id='svg-'+(1+Math.floor(Math.random()*9))+Array.from({length:18},()=>Math.floor(Math.random()*10)).join('');
+  return JSON.stringify({type:'reeden.reader.page_overlays',version:1,items:[{id,
+    box:{scope:'page',anchorX:'left',anchorY:'top',xPercent:pc(S.box.x,SW),yPercent:pc(S.box.y,SH),widthPercent:pc(S.box.w,SW),heightPercent:pc(S.box.h,SH),region:'page',xUnit:'percent',yUnit:'percent',widthUnit:'percent',heightUnit:'percent'},
+    template:code.value,fit:S.fit==='stretch'?'fill':'contain',showOn:'always',layer:'above',type:'svg'}]});
 }
+function clip(text,msg){
+  const fb=()=>{const t=document.createElement('textarea'); t.readOnly=true; t.value=text; t.style.cssText='position:fixed;left:0;top:0;opacity:0'; document.body.appendChild(t); t.select(); let ok=false; try{ok=document.execCommand('copy')}catch(e){} t.remove(); toast(ok?msg:'這個瀏覽器不能自動複製，請到 Code 分頁手動複製')};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast(msg),fb); else fb();
+}
+function fixBeforeCopy(){ if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); } }
+function copy(){ fixBeforeCopy(); clip(reedenClip(),'已複製，到 Reeden 疊加層按剪貼簿按鈕貼上'); }
+function copySvg(){ fixBeforeCopy(); clip(code.value,'已複製 SVG，貼進 Reeden 的 SVG 欄位'); }
 $('copy').onclick=copy; $('copy2').onclick=copy;
+document.addEventListener('click',e=>{ if(e.target.closest&&e.target.closest('[data-copysvg]')) copySvg() });
 function download(){
   if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); }
   try{
