@@ -738,7 +738,8 @@ function layerList(){
 function genLayers(){
   const BW=r2(S.box.w), BH=r2(S.box.h), n6=v=>String(Math.round(v*1e6)/1e6);
   let defs='', gs='';
-  layerList().forEach((L,i)=>{
+  const LL=layerList(), ctr=L=>[r2((L.x+L.w/2)*BW),r2((L.y+L.h/2)*BH)];
+  LL.forEach((L,i)=>{
     const u=parseUpload(prepArt(L.raw,'l'+(i+1))); if(!u) return;
     /* 接力：只在 a%～b% 之間動，用 min/max 夾住（Reeden 實測支援），範圍外停在頭或尾 */
     const a=L.a||0, z=L.b==null?100:L.b, P=L.src==='none'||(a<=0&&z>=100)?L.src:`max(0, min(100, (${L.src} - ${a}) * ${r2(100/(z-a))}))`;
@@ -752,7 +753,10 @@ function genLayers(){
     if(mv){ const prog=['lr','down'].includes(L.mdir)?P:`(100 - ${P})`;
       tr=hz?`translate({= ${r2(X)} + ${r2(W-aw)} * ${prog} / 100} ${r2(Y+(H-ah)/2)})`:`translate(${r2(X+(W-aw)/2)} {= ${r2(Y)} + ${r2(H-ah)} * ${prog} / 100})`; }
     const ga=u.attrs.replace(/\s*xmlns(:\w+)?\s*=\s*["'][^"']*["']/g,'').trim();
-    gs+=`\n  <g transform="${tr} scale(${n6(k)}) translate(${n6(-vb.x)} ${n6(-vb.y)})"${ga?' '+ga:''}>${b.layer}</g>`;
+    let g=`<g transform="${tr} scale(${n6(k)}) translate(${n6(-vb.x)} ${n6(-vb.y)})"${ga?' '+ga:''}>${b.layer}</g>`;
+    /* 繞圈：整張圖繞著另一張圖的中心轉，半徑就是兩張中心的距離 */
+    if(on&&L.fxs.includes('orbit')){ const T=LL[L.tgt||0]||LL[0], [cx,cy]=ctr(T); g=`<g transform="rotate({= ${L.rot==='ccw'?'0 - ':''}${P} * 3.6} ${cx} ${cy})">${g}</g>`; }
+    gs+='\n  '+g;
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 ${BW} ${BH}">`+(defs?`\n  <defs>${defs}</defs>`:'')+gs+'\n</svg>';
 }
@@ -1104,10 +1108,17 @@ function layersUI(){
       g.appendChild(sub('怎麼變化？'));
       /* 移動要有跑道：框太窄時先拉成一長條 */
       const track=()=>{ if(L.fx!=='move') return; if(['lr','rl'].includes(L.mdir)){ if(L.w<0.6){L.x=0.05;L.w=0.9} } else if(L.h<0.6){L.y=0.05;L.h=0.9} };
-      g.appendChild(optRow(FX.filter(f=>f[0]!=='steps'),L.fx,set(v=>{L.fx=v;track()}),FXICON));
+      /* 繞圈：預設放在目標圖的正上方 */
+      const orbit=()=>{ if(L.fx!=='orbit') return; const all=[S.l0||{x:0,y:0,w:1,h:1}].concat(S.layers), T=all[L.tgt||0]||all[0];
+        if(T===L){ L.tgt=0; return orbit() } const sz=Math.min(L.w,L.h,0.15); L.w=L.h=sz; L.x=r2(T.x+T.w/2-sz/2); L.y=r2(T.y+T.h*0.12-sz/2); };
+      g.appendChild(optRow(FX.filter(f=>f[0]!=='steps').concat([['orbit','繞圈']]),L.fx,set(v=>{L.fx=v;track();orbit()}),Object.assign({orbit:ROTICON.cw},FXICON)));
       if(L.fx==='fill'||L.fx==='reveal') g.appendChild(optRow(DIR,L.dir,set(v=>L.dir=v),DIRICON));
       if(L.fx==='move'){ g.appendChild(optRow(MDIR,L.mdir,set(v=>{L.mdir=v;track()}),DIRICON)); g.appendChild(sub('圖會在自己的虛線框裡從一頭走到另一頭，框拉長一點走得越遠。')); }
       if(L.fx==='rotate') g.appendChild(optRow(ROT,L.rot,set(v=>L.rot=v),ROTICON));
+      if(L.fx==='orbit'){ g.appendChild(sub('繞著哪一張轉？'));
+        g.appendChild(optRow([[0,'第 1 張']].concat(S.layers.map((x,j)=>[j+1,'第 '+(j+2)+' 張'])).filter(o=>o[0]!==i+1),L.tgt||0,set(v=>{L.tgt=v;orbit()})));
+        g.appendChild(optRow(ROT,L.rot,set(v=>L.rot=v),ROTICON));
+        g.appendChild(sub('進度走完正好繞一圈。拖這張的虛線框離中心遠一點，圈就越大。')); }
       if(L.fx==='fade') g.appendChild(optRow(FADE,L.fade,set(v=>L.fade=v)));
       g.appendChild(rangeRow(L,L.src));
     }
