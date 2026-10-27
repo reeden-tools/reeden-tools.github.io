@@ -106,6 +106,13 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .boxnums input,.simrow input[type=time]{width:100%;font:inherit;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--fg);color:var(--surface);padding:8px 16px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.undobar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(560px,calc(100% - 32px));display:none;align-items:center;gap:8px 12px;flex-wrap:wrap;background:var(--fg);color:var(--surface);padding:10px 12px 10px 16px;border-radius:12px;font-size:13px;line-height:1.5;z-index:49;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.undobar.show{display:flex}
+.undobar>span:first-child{flex:1 1 220px}
+.undobar .btns{display:flex;gap:8px;margin-left:auto}
+.undobar button{appearance:none;font:inherit;font-size:13px;min-height:44px;padding:0 14px;border-radius:8px;cursor:pointer;border:1px solid currentColor;background:none;color:inherit}
+.undobar button.main{background:var(--surface);color:var(--fg);border-color:var(--surface);font-weight:500}
+body.hasUndo .toast{bottom:calc(var(--undoH,64px) + 28px + env(safe-area-inset-bottom,0px))}
 .note{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;margin:0}
 
 /* 手指操作：框的可觸控範圍加大、圓點移到框外，細細的進度條也拖得動 */
@@ -216,7 +223,7 @@ textarea#code{min-height:220px}
       <section class="panel" id="mCopy" aria-labelledby="t-mcopy"><h2 id="t-mcopy">完成後：複製到 Reeden</h2></section>
       <section class="panel advanced o7" id="codePanel" aria-labelledby="t-code">
         <h2 id="t-code">SVG CODE<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small" id="fitBtn" type="button">跟著框縮放</button><button class="btn small" id="reset" type="button">還原</button></span></h2>
-        <p class="hint">上面三步會自動產生 code。想自己微調可以直接改，但再動到上面的選項時，手動修改會被覆蓋。</p>
+        <p class="hint">上面三步會自動產生 code，也可以直接在這裡改。改過之後再動上面的選項，會出現「復原手改的 code」可以拿回來。</p>
         <textarea id="code" spellcheck="false" autocomplete="off" aria-label="SVG code"></textarea>
         <div class="copyrow" id="mainCopy">
           <div class="status" id="status" aria-live="polite"></div>
@@ -281,6 +288,7 @@ textarea#code{min-height:220px}
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
+<div class="undobar" id="undoBar" role="status"><span>已依新選項重新產生 code，你手改的部分被換掉了。</span><span class="btns"><button type="button" id="undoKeep">知道了</button><button type="button" class="main" id="undoBtn">復原手改的 code</button></span></div>
 <dialog id="askDlg" aria-labelledby="askMsg"><p id="askMsg"></p><div id="askBtns"></div></dialog>
 
 <script>
@@ -788,13 +796,22 @@ function buildStyleRow(){
 
 /* ---------- 產生 code ---------- */
 function regen(){
-  if(S.tpl==='upload'){ if(upRaw) code.value=genUpload(); }
-  else if(S.tpl==='stages'){ code.value=genStages({src:S.src}); }
+  const before=code.value; let out=before;
+  if(S.tpl==='upload'){ if(upRaw) out=genUpload(); }
+  else if(S.tpl==='stages'){ out=genStages({src:S.src}); }
   else { const p={color:S.color,stroke:S.stroke,track:S.track,src:S.src,txt:S.txt};
-    code.value=(S.style==='mine'&&upRaw)?genMine(S.tpl,p):SHAPES[S.tpl].gen(p); }
-  code.value=dedupeArt(code.value);
+    out=(S.style==='mine'&&upRaw)?genMine(S.tpl,p):SHAPES[S.tpl].gen(p); }
+  out=dedupeArt(out);
+  /* 手改過的 code 要被換掉時，先留一份，讓使用者可以復原 */
+  if(manual&&out!==before){ if(backup===null) backup=before; manual=false; showUndo(); }
+  code.value=out;
   save();
 }
+/* ---------- 手改 code 的保護 ---------- */
+let manual=false, backup=null;
+function markManual(){ manual=true; if(backup!==null){ backup=null; hideUndo(); } }
+function showUndo(){ const b=$('undoBar'); b.classList.add('show'); document.body.classList.add('hasUndo'); document.body.style.setProperty('--undoH',b.offsetHeight+'px'); }
+function hideUndo(){ $('undoBar').classList.remove('show'); document.body.classList.remove('hasUndo'); }
 /* 同一個圖案在 code 裡出現好幾次時，只寫一次放進 <defs>，其他地方用 <use> 引用（Reeden 實測支援），code 可以少一半以上 */
 function dedupeArt(txt){
   const arts=[]; [upRaw,upRaw2].concat(stagesRaw.map(x=>x&&x.raw)).forEach(r=>{ const u=r&&parseUpload(r); if(u&&u.inner.trim().length>200) arts.push(u.inner) });
@@ -1006,9 +1023,10 @@ function loadSvg(txt,name,slot,noAsk){
   if(!noAsk&&txt.length>BIG) setTimeout(()=>offerShrink(txt,name,slot),fixed?2300:600);
   if(typeof slot==='string'&&slot[0]==='s'){ const i=+slot.slice(1); stagesRaw[i]={raw:txt,name:name||''}; stagesRaw=stagesRaw.filter(Boolean); regen(); refresh(); toast('第 '+(Math.min(i,stagesRaw.length-1)+1)+' 張已載入'); return }
   if(slot===2){ upRaw2=txt; upName2=name||''; S.style='mine'; regen(); refresh(); toast('標記圖案已載入'); if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100); return }
-  upRaw=txt; upName=name||'';
-  if(S.tpl!=='upload'){ S.style='mine'; S.box=boxForMine(S.tpl); }
-  else { S.src='none'; S.box=boxForUpload(); }
+  const had=!!upRaw; upRaw=txt; upName=name||'';
+  /* 換檔案時保留原本選好的變化和框的位置，只有第一次載入才用預設值 */
+  if(S.tpl!=='upload'){ if(!(had&&S.style==='mine')) S.box=boxForMine(S.tpl); S.style='mine'; }
+  else if(!had){ S.src='none'; S.box=boxForUpload(); }
   regen(); refresh();
   if(fixed) setTimeout(()=>toast('已把 Reeden 讀不懂的數字寫法修好（像 1.8.8 或用逗號當小數點）'),2100);
   toast(u.vb?(S.tpl==='upload'?'已載入，接著選它要怎麼變化':'已載入，已套用成你的樣式'):'已載入，但檔案沒有 viewBox，比例可能不準');
@@ -1052,7 +1070,7 @@ function buildVars(){
     const c=document.createElement('div'); c.className='chips';
     g.k.forEach(x=>{const b=document.createElement('button'); b.type='button'; b.className='chip'; b.dataset.k=x.c;
       b.innerHTML='<b></b><code></code>'; b.querySelector('b').textContent=x.l; b.querySelector('code').textContent='{'+x.c+'}';
-      b.onclick=()=>{const s=code.selectionStart,e=code.selectionEnd; code.setRangeText('{'+x.c+'}',s,e,'end'); code.focus(); render(); save()}; c.appendChild(b)});
+      b.onclick=()=>{const s=code.selectionStart,e=code.selectionEnd; code.setRangeText('{'+x.c+'}',s,e,'end'); code.focus(); markManual(); render(); save()}; c.appendChild(b)});
     sec.appendChild(c); varWrap.appendChild(sec);
   });
   const t=document.createElement('button'); t.type='button'; t.className='btn small'; t.style.alignSelf='flex-start';
@@ -1115,9 +1133,9 @@ function render(){
 function syncBox(){const r=v=>Math.round(v*10)/10; $('bx').value=r(S.box.x/SW*100);$('by').value=r(S.box.y/SH*100);$('bw').value=r(S.box.w/SW*100);$('bh').value=r(S.box.h/SH*100)}
 
 /* ---------- 儲存 ---------- */
-function save(){try{localStorage.setItem(KEY,JSON.stringify({S,code:code.value,upRaw,upName,upRaw2,upName2,stagesRaw}))}catch(e){}}
-let savedCode=null;
-try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''; stagesRaw=Array.isArray(d.stagesRaw)?d.stagesRaw:[]}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({S,code:code.value,manual,upRaw,upName,upRaw2,upName2,stagesRaw}))}catch(e){}}
+let savedCode=null, savedManual=false;
+try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d&&d.S){Object.assign(S,d.S); savedCode=d.code; savedManual=!!d.manual; upRaw=d.upRaw||null; upName=d.upName||''; upRaw2=d.upRaw2||null; upName2=d.upName2||''; stagesRaw=Array.isArray(d.stagesRaw)?d.stagesRaw:[]}}catch(e){}
 if(!SHAPES[S.tpl]) S.tpl='bar';
 if(!Array.isArray(S.fxs)) S.fxs=[S.fx==='fillLR'?'fill':(S.fx||'fill')]; if(S.fx==='fillLR') S.dir='lr'; S.mdir=S.mdir||'lr'; if(!S.dir) S.dir='up'; S.style=S.style||'builtin'; S.rot=S.rot||'cw'; S.fade=S.fade||'in'; S.fc=S.fc||'orig'; S.fcolor=S.fcolor||'#2B2A27';
 
@@ -1189,11 +1207,13 @@ ovl.addEventListener('pointerdown',e=>{
 ['bx','by','bw','bh'].forEach((id,i)=>$(id).addEventListener('input',e=>{const v=parseFloat(e.target.value); if(isNaN(v))return; const k=['x','y','w','h'][i], base=(k==='x'||k==='w')?SW:SH; S.box[k]=v/100*base; if(k==='w'||k==='h') S.box[k]=Math.max(4,S.box[k]); render(); save();}));
 
 /* ---------- 控制項 ---------- */
-code.addEventListener('input',()=>{render();save()});
-code.addEventListener('keydown',e=>{if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();code.setRangeText('  ',code.selectionStart,code.selectionEnd,'end');render()}});
+code.addEventListener('input',()=>{markManual();render();save()});
+code.addEventListener('keydown',e=>{if(e.key==='Tab'&&!e.shiftKey){e.preventDefault();code.setRangeText('  ',code.selectionStart,code.selectionEnd,'end');markManual();render();save()}});
+$('undoBtn').onclick=()=>{ if(backup===null){hideUndo();return} code.value=backup; backup=null; manual=true; hideUndo(); render(); save(); toast('已復原你手改的 code') };
+$('undoKeep').onclick=()=>{ backup=null; hideUndo() };
 $('reset').onclick=()=>{regen();render();toast('已還原成依上面選項產生的 code')};
 $('fitBtn').onclick=()=>{const u=parseUpload(code.value); if(!u||!u.vb){toast('找不到 SVG 的原始尺寸，請先加上 viewBox');return}
-  code.value=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="${u.vb.x} ${u.vb.y} ${u.vb.w} ${u.vb.h}">${u.inner}</svg>`; render(); save(); toast('寬高已改成 {w} 和 {h}')};
+  code.value=`<svg ${u.attrs} width="{w}" height="{h}" viewBox="${u.vb.x} ${u.vb.y} ${u.vb.w} ${u.vb.h}">${u.inner}</svg>`; markManual(); render(); save(); toast('寬高已改成 {w} 和 {h}')};
 $('pColor').oninput=e=>{S.color=e.target.value.toUpperCase();colorNote();regen();render()};
 $('pStroke').oninput=e=>{S.stroke=+e.target.value;$('oStroke').textContent=S.stroke;regen();render()};
 $('pTrack').oninput=e=>{S.track=+e.target.value;$('oTrack').textContent=S.track;regen();render()};
@@ -1246,7 +1266,7 @@ $('rbg').value=S.rbg; $('rfg').value=S.rfg; $('fs').value=S.fs;
 $('mDay').setAttribute('aria-pressed',S.mode==='day'); $('mNight').setAttribute('aria-pressed',S.mode==='night');
 $('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTime').value=S.time;
 S.fit=S.fit||'meet'; $('fitMeet').setAttribute('aria-pressed',S.fit==='meet'); $('fitStretch').setAttribute('aria-pressed',S.fit==='stretch');
-if(savedCode) code.value=savedCode; else regen();
+if(savedCode){ code.value=savedCode; manual=savedManual; } else regen();
 fit(); refresh();
 })();
 </script>
