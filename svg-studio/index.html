@@ -1041,8 +1041,13 @@ function buildStep2(){
           if(S.fc==='custom'){
             const ci=document.createElement('input'); ci.type='color'; ci.id='fcolor'; ci.value=S.fcolor==='currentColor'?S.rfg:S.fcolor; ci.setAttribute('aria-label','填滿的顏色');
             ci.oninput=e=>{S.fcolor=e.target.value.toUpperCase(); regen(); render()};
-            const ub=document.createElement('button'); ub.type='button'; ub.className='btn small'; ub.textContent='跟著閱讀頁文字色';
-            ub.onclick=()=>{S.fcolor='currentColor'; ci.value=S.rfg; regen(); render(); toast('填滿色改成跟著閱讀頁文字色')};
+            const ub=document.createElement('button'); ub.type='button'; ub.className='btn small';
+            const note=()=>{const on=S.fcolor==='currentColor'; ub.textContent=on?'✓ 跟著閱讀頁文字色（再點一次取消）':'跟著閱讀頁文字色'; ub.setAttribute('aria-pressed',on)}; note();
+            // second tap turns it off and brings back the colour picked before
+            ub.onclick=()=>{ if(S.fcolor==='currentColor'){S.fcolor=S.fcolorBefore||'#2B2A27'; ci.value=S.fcolor.toLowerCase(); toast('填滿色改回原本的顏色')}
+              else{S.fcolorBefore=S.fcolor; S.fcolor='currentColor'; ci.value=S.rfg; toast('填滿色改成跟著閱讀頁文字色')}
+              note(); regen(); render()};
+            ci.addEventListener('input',note);
             crow.appendChild(ci); crow.appendChild(ub);
           }
           const h2=document.createElement('p'); h2.className='sub'; h2.style.color='var(--fg)'; h2.textContent='填滿的顏色'; g.appendChild(h2); g.appendChild(crow);
@@ -1506,8 +1511,11 @@ $('fitBtn').onclick=()=>{const u=parseUpload(code.value); if(!u||!u.vb){toast('�
 $('pColor').oninput=e=>{S.color=e.target.value.toUpperCase();colorNote();regen();render()};
 $('pStroke').oninput=e=>{S.stroke=+e.target.value;$('oStroke').textContent=S.stroke;regen();render()};
 $('pTrack').oninput=e=>{S.track=+e.target.value;$('oTrack').textContent=S.track;regen();render()};
-$('useText').onclick=()=>{S.color='currentColor';$('pColor').value=S.rfg;colorNote();regen();render()};
-function colorNote(){$('useText').textContent=S.color==='currentColor'?'✓ 跟著閱讀頁文字色':'改成跟著閱讀頁文字色'; $('useText').setAttribute('aria-pressed',S.color==='currentColor')}
+// second tap turns it off and brings back the colour picked before
+$('useText').onclick=()=>{ if(S.color==='currentColor'){S.color=S.colorBefore||'#2B2A27'; $('pColor').value=S.color.toLowerCase(); toast('顏色改回原本的顏色')}
+  else{S.colorBefore=S.color; S.color='currentColor'; $('pColor').value=S.rfg}
+  colorNote();regen();render()};
+function colorNote(){$('useText').textContent=S.color==='currentColor'?'✓ 跟著閱讀頁文字色（再點一次取消）':'改成跟著閱讀頁文字色'; $('useText').setAttribute('aria-pressed',S.color==='currentColor')}
 function setMode(m){S.mode=m; S.rbg=MODES[m].rbg; S.rfg=MODES[m].rfg; $('rbg').value=S.rbg; $('rfg').value=S.rfg;
   $('mDay').setAttribute('aria-pressed',m==='day'); $('mNight').setAttribute('aria-pressed',m==='night'); render(); save()}
 $('mDay').onclick=()=>setMode('day'); $('mNight').onclick=()=>setMode('night');
