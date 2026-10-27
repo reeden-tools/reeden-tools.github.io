@@ -65,6 +65,14 @@ textarea#code{width:100%;min-height:260px;resize:vertical;font-family:var(--f-mo
 .status .ok{color:var(--ok)} .status .err{color:var(--danger)} .status .note2{color:var(--muted)}
 .boxhint{font-size:12.5px;margin:0;color:var(--fg);background:var(--sunk);border-radius:8px;padding:8px 10px}
 .boxhint b{color:var(--accent);font-weight:500;font-variant-numeric:tabular-nums}
+.cloud{border-top:1px dashed var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.cloud h3{font-size:13px;margin:0;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cloud .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cloud .link{display:flex;gap:6px;align-items:center;min-width:0}
+.cloud .link span{font-size:12px;color:var(--muted);white-space:nowrap}
+.cloud .link input{flex:1;min-width:0;font:inherit;font-family:var(--f-mono);font-size:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.cloud .warn{color:var(--danger)}
+@media (pointer:coarse){.cloud .link input{font-size:16px}}
 .vargroup{display:flex;flex-direction:column;gap:6px}
 .vargroup h3{font-size:12px;margin:0;font-weight:500;color:var(--fg)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -230,6 +238,16 @@ textarea#code{min-height:220px}
           <span style="display:flex;gap:8px"><button class="btn" id="dl" type="button">下載 .txt</button><button class="btn primary" id="copy" type="button">複製 code</button></span>
         </div>
         <p class="boxhint" id="boxHint"></p>
+        <div class="cloud" id="cloudBox">
+          <h3>雲端儲存<span class="row"><button class="btn small" id="cloudRestore" type="button" hidden>還原打開前的作品</button></span></h3>
+          <p class="hint" id="cloudNote">作品平常就存在這台裝置。存到雲端可以拿到分享連結，也能在別的裝置繼續改。</p>
+          <div class="row"><button class="btn primary" id="cloudSave" type="button">存到雲端</button><button class="btn" id="cloudNew" type="button" hidden>另存成新的</button></div>
+          <div id="cloudLinks" hidden>
+            <div class="link"><span>分享連結</span><input id="cloudShare" readonly aria-label="分享連結"><button class="btn small" id="cloudShareCopy" type="button">複製</button></div>
+            <div class="link" id="cloudEditRow"><span>編輯連結</span><input id="cloudEdit" readonly aria-label="編輯連結"><button class="btn small" id="cloudEditCopy" type="button">複製</button></div>
+            <p class="hint warn" id="cloudEditWarn">編輯連結可以修改這個作品，請自己保存好，不要給別人；弄丟了就只能另存成新的。</p>
+          </div>
+        </div>
         <details class="vars" id="varsBox">
           <summary>插入變數</summary>
           <p class="hint" style="margin-top:8px">先點 code 裡要放的位置，再點按鈕。</p>
@@ -291,6 +309,7 @@ textarea#code{min-height:220px}
 <div class="undobar" id="undoBar" role="status"><span>已依新選項重新產生 code，你手改的部分被換掉了。</span><span class="btns"><button type="button" id="undoKeep">知道了</button><button type="button" class="main" id="undoBtn">復原手改的 code</button></span></div>
 <dialog id="askDlg" aria-labelledby="askMsg"><p id="askMsg"></p><div id="askBtns"></div></dialog>
 
+<script src="../shared/cloud.v1.js"></script>
 <script>
 (function(){
 const SW=393, SH=852;
@@ -1144,8 +1163,8 @@ if(!Array.isArray(S.fxs)) S.fxs=[S.fx==='fillLR'?'fill':(S.fx||'fill')]; if(S.fx
 const mq=matchMedia('(max-width:900px)');
 function placeCopy(){
   const home=$('codePanel'), dest=$('mCopy'), row=$('mainCopy'), hint=$('boxHint');
-  if(mq.matches){ dest.appendChild(row); dest.appendChild(hint); }
-  else { const ta=$('code'); ta.after(row); row.after(hint); }
+  if(mq.matches){ dest.appendChild(row); dest.appendChild(hint); dest.appendChild($('cloudBox')); }
+  else { const ta=$('code'); ta.after(row); row.after(hint); hint.after($('cloudBox')); }
 }
 
 /* 手機版：預覽固定在上面，下面用分頁一步一步選（參考晝夜展台） */
@@ -1258,6 +1277,73 @@ function download(){
 $('dl').onclick=download; $('dl2').onclick=download;
 let tt; function toast(m){const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),2000)}
 
+
+/* ---------- 雲端儲存（reeden-api，選用；連不上時只用本機） ---------- */
+const CLOUD_KEY=KEY+'-cloud', BACKUP_KEY=KEY+'-before-cloud', TOOL='svg';
+const cloudOk=()=>!!window.ReedenCloud;
+function cloudRec(){try{return JSON.parse(localStorage.getItem(CLOUD_KEY)||'null')}catch(e){return null}}
+function setCloudRec(r){try{r?localStorage.setItem(CLOUD_KEY,JSON.stringify(r)):localStorage.removeItem(CLOUD_KEY)}catch(e){}}
+function cloudFiles(){ // 上傳的原始 SVG 放進雲端檔案，其餘狀態放在 data
+  const f={}; if(upRaw) f.upRaw=upRaw; if(upRaw2) f.upRaw2=upRaw2;
+  stagesRaw.forEach((x,i)=>{ if(x&&x.raw) f['stage'+i]=x.raw });
+  return f;
+}
+function cloudData(){return {S,code:code.value,manual,upName,upName2,stageNames:stagesRaw.map(x=>x?x.name||'':'')}}
+function renderCloud(){
+  const box=$('cloudBox'); if(!cloudOk()){ box.hidden=true; return }
+  const r=cloudRec();
+  $('cloudSave').textContent=r&&r.key?'更新雲端':'存到雲端';
+  $('cloudNew').hidden=!(r&&r.key);
+  $('cloudLinks').hidden=!r;
+  if(r){ const l=ReedenCloud.links(r.id,r.key); $('cloudShare').value=l.share; $('cloudEditRow').hidden=$('cloudEditWarn').hidden=!l.edit; if(l.edit) $('cloudEdit').value=l.edit; }
+  let hasBackup=false; try{hasBackup=!!localStorage.getItem(BACKUP_KEY)}catch(e){}
+  $('cloudRestore').hidden=!hasBackup;
+}
+let cloudBusy=false;
+async function cloudSave(asNew){
+  if(cloudBusy||!cloudOk()) return; cloudBusy=true;
+  const btn=asNew?$('cloudNew'):$('cloudSave'), label=btn.textContent; btn.disabled=true; btn.textContent='儲存中…';
+  try{
+    if(gluedNums(code.value)){ code.value=normalizeSvg(code.value); render(); save(); }
+    let r=cloudRec(); const body={data:cloudData(),title:(upName||'').slice(0,80),schema_version:'svg-v7'};
+    if(asNew||!r||!r.key){ const c=await ReedenCloud.create(TOOL,body); r={id:c.id,key:c.key,slots:[]}; }
+    else await ReedenCloud.update(TOOL,r.id,r.key,body);
+    const files=cloudFiles(), slots=Object.keys(files);
+    for(const k of slots) await ReedenCloud.putFile(TOOL,r.id,r.key,k,files[k],k+'.svg');
+    for(const k of (r.slots||[])) if(!files[k]) await ReedenCloud.deleteFile(TOOL,r.id,r.key,k).catch(()=>{});
+    r.slots=slots; setCloudRec(r); renderCloud();
+    toast(asNew||label==='存到雲端'?'已存到雲端，下面有分享連結':'已更新雲端');
+  }catch(e){ toast(ReedenCloud.message(e)) }
+  finally{ btn.disabled=false; btn.textContent=label; cloudBusy=false; renderCloud(); }
+}
+function copyText(id,msg){const el=$(id); const done=()=>toast(msg); const fb=()=>{el.focus();el.select();toast('已選取，請按複製')};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(el.value).then(done,fb); else fb();}
+$('cloudSave').onclick=()=>cloudSave(false); $('cloudNew').onclick=()=>cloudSave(true);
+$('cloudShareCopy').onclick=()=>copyText('cloudShare','已複製分享連結');
+$('cloudEditCopy').onclick=()=>copyText('cloudEdit','已複製編輯連結，請自己保存好');
+$('cloudRestore').onclick=()=>askDlg('要還原成打開雲端作品之前的樣子嗎？目前畫面上的雲端作品，仍可以用連結再打開。',[
+  ['取消',null],
+  ['還原',()=>{try{const b=localStorage.getItem(BACKUP_KEY); if(b){localStorage.setItem(KEY,b); localStorage.removeItem(BACKUP_KEY); const rb=localStorage.getItem(BACKUP_KEY+'-cloud'); rb?localStorage.setItem(CLOUD_KEY,rb):localStorage.removeItem(CLOUD_KEY); localStorage.removeItem(BACKUP_KEY+'-cloud');} }catch(e){} location.reload()},true]]);
+// 打開 #w= 連結：先問、先備份目前作品，寫進本機儲存後重新載入，沿用原本的讀取流程
+async function openCloud(link){
+  history.replaceState(null,'',location.pathname+location.search);
+  let w; try{ w=await ReedenCloud.get(TOOL,link.id,link.key) }catch(e){ toast(ReedenCloud.message(e)); return }
+  const d=w.data||{}; if(!d.S){ toast('這個連結不是 SVG 工坊的作品'); return }
+  const go=async()=>{
+    try{
+      const raw={}; for(const f of w.files||[]) raw[f.slot]=await (await ReedenCloud.getFile(TOOL,link.id,f.slot,link.key)).text();
+      const stagesRaw2=(d.stageNames||[]).map((n,i)=>raw['stage'+i]!=null?{raw:raw['stage'+i],name:n}:null).filter(Boolean);
+      const blob={S:d.S,code:d.code,manual:!!d.manual,upRaw:raw.upRaw||null,upName:d.upName||'',upRaw2:raw.upRaw2||null,upName2:d.upName2||'',stagesRaw:stagesRaw2};
+      localStorage.setItem(BACKUP_KEY,localStorage.getItem(KEY)||JSON.stringify({S}));
+      const prev=localStorage.getItem(CLOUD_KEY); prev?localStorage.setItem(BACKUP_KEY+'-cloud',prev):localStorage.removeItem(BACKUP_KEY+'-cloud');
+      localStorage.setItem(KEY,JSON.stringify(blob));
+      setCloudRec(w.owner?{id:link.id,key:link.key,slots:Object.keys(raw)}:{id:link.id,key:null,slots:[]});
+      sessionStorage.setItem(KEY+'-opened',w.owner?'edit':'view');
+      location.reload();
+    }catch(e){ toast(e&&e.code?ReedenCloud.message(e):'打開雲端作品失敗，你目前的作品沒有變動') }
+  };
+  askDlg((w.owner?'要打開這個雲端作品繼續編輯嗎？':'要打開這個分享的作品嗎？')+'\n\n你目前的作品會先備份，之後可以按「還原打開前的作品」拿回來。',[['取消',null],['打開',go,true]]);
+}
 /* ---------- 初始化 ---------- */
 $('rBody').innerHTML=PARAS.map(p=>'<p>'+p+'</p>').join('');
 buildVars();
@@ -1268,6 +1354,9 @@ $('sChap').value=S.chap; $('sBook').value=S.book; $('sBat').value=S.bat; $('sTim
 S.fit=S.fit||'meet'; $('fitMeet').setAttribute('aria-pressed',S.fit==='meet'); $('fitStretch').setAttribute('aria-pressed',S.fit==='stretch');
 if(savedCode){ code.value=savedCode; manual=savedManual; } else regen();
 fit(); refresh();
+renderCloud();
+try{const o=sessionStorage.getItem(KEY+'-opened'); if(o){sessionStorage.removeItem(KEY+'-opened'); toast(o==='edit'?'已打開雲端作品，改完按「更新雲端」':'已打開分享的作品，存到雲端會變成你自己的一份')}}catch(e){}
+if(cloudOk()){const link=ReedenCloud.parseHash(); if(link) openCloud(link);}
 })();
 </script>
 
