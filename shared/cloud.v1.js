@@ -19,6 +19,12 @@
     unsupported_type: '這個檔案格式不能存到雲端。',
     storage_full: '雲端空間已滿，暫時不能上傳檔案。',
     monthly_quota_reached: '本月雲端上傳次數已用完，下個月會恢復。',
+    handle_taken: '這個代號已經有人用了，換一個試試。',
+    bad_handle: '代號要 2 到 20 個字，只能用文字、數字、底線或減號。',
+    weak_password: '密碼至少要 6 個字。',
+    bad_password: '密碼不對。',
+    too_many_attempts: '密碼錯太多次，請 15 分鐘後再試。',
+    already_named: '這個作品集已經有代號了。',
   };
   function message(err) {
     const code = err && err.code;
@@ -114,9 +120,38 @@
     },
   };
 
+  /* 代號：作品集的公開名字。輸入代號誰都能看（沒有編輯密鑰，只能套用成自己的一份）；
+     在新裝置輸入代號和密碼，才會拿回作品集的密鑰。這台裝置的代號記在 reeden-handle。 */
+  const HKEY = 'reeden-handle';
+  const hGet = () => { try { return localStorage.getItem(HKEY) || null; } catch (e) { return null; } };
+  const hSet = h => { try { h ? localStorage.setItem(HKEY, h) : localStorage.removeItem(HKEY); } catch (e) {} };
+  const handles = {
+    mine: hGet,
+    // 幫這台的作品集取代號（作品集還沒建立時先建一個空的）
+    async claim(handle, password) {
+      let c = cGet();
+      if (!c) { await sync('', []); c = cGet(); }
+      if (!c) { const r = await request('POST', 'collection/works', { body: { data: { v: 1, items: [], removed: [] }, schema_version: 'collection-1' } }); c = { id: r.id, key: r.key }; cSet(c); }
+      const r = await request('POST', 'handles', { key: c.key, body: { handle, password, collection_id: c.id } });
+      hSet(r.handle); return r.handle;
+    },
+    view: handle => request('GET', 'handles/' + enc(handle)),
+    // 在新裝置用代號和密碼拿回作品集；這台原本的作品會在下次同步時併進去
+    async login(handle, password) {
+      const r = await request('POST', 'handles/' + enc(handle) + '/login', { body: { password } });
+      cSet({ id: r.collection_id, key: r.collection_key }); hSet(r.handle); return r.handle;
+    },
+    setPassword(password) { const c = cGet(), h = hGet(); return request('PUT', 'handles/' + enc(h), { key: c && c.key, body: { password } }); },
+    forget() { hSet(null); },
+    // '#u=<代號>'
+    parse(hash) { const m = /^#u=(.{1,80})$/.exec(hash == null ? location.hash : hash); if (!m) return null; try { return decodeURIComponent(m[1]); } catch (e) { return null; } },
+    link: h => location.origin + location.pathname + '#u=' + enc(h || hGet() || ''),
+  };
+
   window.ReedenCloud = {
     message,
     collection,
+    handles,
     // {data, title?, author_name?, schema_version?} → {id, key}
     create: (tool, body) => request('POST', enc(tool) + '/works', { body }),
     get: (tool, id, key) => request('GET', work(tool, id), { key }),
