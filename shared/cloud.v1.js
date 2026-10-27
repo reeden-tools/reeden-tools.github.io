@@ -1,6 +1,6 @@
 /* reeden-tools 共用雲端模組 v1：給 GitHub Pages 上的各工具呼叫 reeden-api。
    雲端只是選用：連不上時各工具照常使用本機儲存。
-   window.ReedenCloud = { create, get, update, remove, putFile, getFile, deleteFile, parseHash, links, message } */
+   window.ReedenCloud = { create, get, update, remove, putFile, getFile, deleteFile, parseHash, links, message, collection } */
 (function () {
   'use strict';
   if (window.ReedenCloud) return;
@@ -55,8 +55,68 @@
   const enc = encodeURIComponent;
   const work = (tool, id) => enc(tool) + '/works/' + enc(id);
 
+  /* 作品集：同一個人的作品清單（id 和編輯密鑰）也存在雲端，換裝置時打開一個連結就能搬過去。
+     兩個工具同網域，共用這台裝置記住的作品集 {id, key}；清單項目 {tool, id, key, name, page?, at}。 */
+  const CKEY = 'reeden-collection';
+  const cGet = () => { try { const c = JSON.parse(localStorage.getItem(CKEY) || 'null'); return c && c.id && c.key ? c : null; } catch (e) { return null; } };
+  const cSet = c => { try { c ? localStorage.setItem(CKEY, JSON.stringify(c)) : localStorage.removeItem(CKEY); } catch (e) {} };
+  const same = (a, b) => a.key === b.key && a.tool === b.tool && (a.name || '') === (b.name || '') && (a.page || '') === (b.page || '') && (!b.look || JSON.stringify(a.look) === JSON.stringify(b.look));
+  let chain = Promise.resolve();
+  // 把這個工具在本機的作品併進雲端作品集，回傳合併後的全部項目（.removed 是被拿掉的 id，各裝置照著刪）
+  // opt.remove：要從作品集拿掉的 id；opt.keep：剛存過或打開過、即使以前被拿掉也要放回來的 id
+  function sync(tool, local, opt) {
+    opt = opt || {};
+    const run = async () => {
+      let c = cGet(), data = {};
+      if (c) {
+        try { data = (await request('GET', work('collection', c.id), { key: c.key })).data || {}; }
+        catch (e) { if (e.code === 'not_found') { c = null; cSet(null); } else throw e; }
+      }
+      const items = data.items || [];
+      const keep = new Set(opt.keep || []);
+      const gone = new Set((data.removed || []).filter(id => !keep.has(id)));
+      (opt.remove || []).forEach(id => gone.add(id));
+      const map = new Map(items.filter(x => x && x.id && !gone.has(x.id)).map(x => [x.id, x]));
+      let changed = map.size !== items.length || gone.size !== (data.removed || []).length;
+      for (const it of local || []) {
+        if (!it || !it.id || !it.key || gone.has(it.id)) continue;
+        const n = { tool, id: it.id, key: it.key, name: it.name || '', at: it.at || Date.now() };
+        if (it.page) n.page = it.page;
+        if (it.look) n.look = it.look; // 畫縮圖需要的小資料（例如 SVG 的框位置和底色）
+        const o = map.get(it.id);
+        if (!o || !same(o, n)) { map.set(it.id, o ? Object.assign({}, o, n, { at: o.at || n.at }) : n); changed = true; }
+      }
+      const all = [...map.values()], removed = [...gone].slice(-500);
+      all.removed = removed;
+      if (!c) {
+        if (!all.length) return all;
+        const r = await request('POST', 'collection/works', { body: { data: { v: 1, items: all, removed }, schema_version: 'collection-1' } });
+        cSet({ id: r.id, key: r.key });
+      } else if (changed) await request('PUT', work('collection', c.id), { key: c.key, body: { data: { v: 1, items: all, removed } } });
+      return all;
+    };
+    const p = chain.then(run, run); chain = p.catch(() => {}); return p;
+  }
+  const collection = {
+    get: cGet,
+    sync,
+    // '#c=<id>.<key>' → {id, key}
+    parse(hash) {
+      const m = /^#c=([A-Za-z0-9]{16})\.([A-Za-z0-9_-]{20,128})$/.exec(hash == null ? location.hash : hash);
+      return m ? { id: m[1], key: m[2] } : null;
+    },
+    link(c) { c = c || cGet(); return c ? location.origin + location.pathname + '#c=' + c.id + '.' + c.key : null; },
+    // 換到連結裡的作品集：先確認讀得到，原本這台記住的作品會在下次同步時併進去
+    async adopt(link) {
+      const w = await request('GET', work('collection', link.id), { key: link.key });
+      cSet({ id: link.id, key: link.key });
+      return ((w.data || {}).items) || [];
+    },
+  };
+
   window.ReedenCloud = {
     message,
+    collection,
     // {data, title?, author_name?, schema_version?} → {id, key}
     create: (tool, body) => request('POST', enc(tool) + '/works', { body }),
     get: (tool, id, key) => request('GET', work(tool, id), { key }),
@@ -67,6 +127,8 @@
       request('PUT', work(tool, id) + '/files/' + enc(slot), { key, body: data, filename, timeout: 60000 }),
     getFile: (tool, id, slot, key) =>
       request('GET', work(tool, id) + '/files/' + enc(slot), { key, blob: true, timeout: 60000 }),
+    // public address of a file, for <img src> (fonts and hidden works still need the key)
+    fileUrl: (tool, id, slot) => BASE + work(tool, id) + '/files/' + enc(slot),
     deleteFile: (tool, id, key, slot) => request('DELETE', work(tool, id) + '/files/' + enc(slot), { key }),
     // '#w=<id>' or '#w=<id>.<key>' → {id, key|null}
     parseHash(hash) {
