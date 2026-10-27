@@ -277,7 +277,7 @@ textarea#code{min-height:220px}
         <h2 class="q" id="q1"><span class="n">1</span>你想要什麼樣的 SVG？</h2>
         <div class="tpls" id="tpls"></div>
         <div id="styleRow" class="col" style="gap:10px"></div>
-        <input type="file" id="file" accept=".svg,image/svg+xml" hidden>
+        <input type="file" id="file" hidden>
       </section>
 
       <section class="panel step o2" aria-labelledby="q2">
@@ -1296,7 +1296,7 @@ function maybeAskShrink(sz){
 /* ---------- 上傳 ---------- */
 function loadSvg(txt,name,slot,noAsk){
   slot=slot||1;
-  txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[\s\S]*?>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
+  txt=txt.replace(/<\?xml[\s\S]*?\?>/g,'').replace(/<!DOCTYPE[^\[>]*(\[[\s\S]*?\])?\s*>/gi,'').replace(/<!--[\s\S]*?-->/g,'').trim();
   const u=parseUpload(txt); if(!u){toast('這個檔案裡找不到完整的 <svg>');return}
   const fixed=gluedNums(txt); txt=normalizeSvg(txt);
   if(!noAsk&&txt.length>BIG) setTimeout(()=>offerShrink(txt,name,slot),fixed?2300:600);
@@ -1320,9 +1320,11 @@ function loadSvg(txt,name,slot,noAsk){
 function autoSlot(){if(S.tpl==='stages') return 's'+Math.min(4,stagesRaw.length); return (S.tpl!=='upload'&&S.style==='mine'&&roleOf(S.tpl).startsWith('both')&&upRaw&&!upRaw2)?2:1}
 function readFile(f){
   if(!f) return;
-  if(!/svg/i.test(f.type)&&!/\.svg$/i.test(f.name)){toast('請選擇 .svg 檔');return}
+  /* 選檔不限類型：有些手機（例如從 LINE、雲端硬碟存下來的）不把 .svg 認成 SVG，會變灰選不到；改成讀內容判斷 */
   if(f.size>2*1024*1024){toast('檔案超過 2MB，請先精簡再上傳');return}
-  const slot=slotTarget; slotTarget=autoSlot(); const r=new FileReader(); r.onload=()=>loadSvg(String(r.result),f.name,slot); r.onerror=()=>toast('讀取檔案失敗，請再試一次'); r.readAsText(f);
+  const slot=slotTarget; slotTarget=autoSlot(); const r=new FileReader();
+  r.onload=()=>{const t=String(r.result); if(!/<svg\b/i.test(t)){toast('這個檔案不是 SVG，請選擇 .svg 檔');return} loadSvg(t,f.name,slot)};
+  r.onerror=()=>toast('讀取檔案失敗，請再試一次'); r.readAsText(f);
 }
 $('file').onchange=e=>{readFile(e.target.files[0]); e.target.value=''};
 document.addEventListener('paste',e=>{
