@@ -1675,7 +1675,7 @@ function renderOther(g){
   $('mineNote').textContent='';
   const back=document.createElement('button'); back.type='button'; back.className='btn small'; back.textContent='← 回到我的作品'; back.onclick=()=>{other=null; history.replaceState(null,'',location.pathname+location.search); renderMine()};
   const top=document.createElement('div'); top.className='acts'; top.appendChild(back);
-  if(rest){ const a=document.createElement('a'); a.className='btn small'; a.href='../lovia-reading-studio/index.html#u='+encodeURIComponent(other.handle); a.textContent='看展示工坊的作品'; top.appendChild(a) }
+  if(rest){ const a=document.createElement('a'); a.className='btn small'; a.href='../lovia-chi/index.html#u='+encodeURIComponent(other.handle); a.textContent='看展示工坊的作品'; top.appendChild(a) }
   g.appendChild(top);
   if(!mineTool.length){ const p=document.createElement('p'); p.className='hint'; p.textContent='這個作品集裡還沒有 SVG 作品。'; g.appendChild(p) }
   mineTool.forEach(x=>{
